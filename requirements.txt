@@ -1,0 +1,74 @@
+# requirements.txt
+# ============================================================
+# SENTINEL AI — Python Dependencies
+# Install with: pip install -r requirements.txt
+# ============================================================
+
+# ─── Web Framework ───────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+python-multipart==0.0.9
+
+# ─── Agent Orchestration ─────────────────────────────────────
+langgraph==0.2.0
+langchain==0.3.0
+langchain-community==0.3.0
+crewai==0.67.0
+
+# ─── LLM SDKs ────────────────────────────────────────────────
+groq==0.11.0
+anthropic==0.34.0
+openai==1.51.0
+
+# ─── Vector Database ─────────────────────────────────────────
+chromadb==0.5.0
+sentence-transformers==3.1.0
+
+# ─── Database ────────────────────────────────────────────────
+sqlalchemy==2.0.35
+alembic==1.13.3
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# ─── Task Queue ──────────────────────────────────────────────
+celery==5.4.0
+redis==5.1.0
+
+# ─── HTTP Client ─────────────────────────────────────────────
+httpx==0.27.2
+
+# ─── Data Validation ─────────────────────────────────────────
+pydantic==2.9.0
+pydantic-settings==2.5.0
+
+# ─── Authentication ──────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# ─── Report Generation ───────────────────────────────────────
+reportlab==4.2.2
+jinja2==3.1.4
+
+# ─── CVSS Scoring ────────────────────────────────────────────
+cvss==2.6
+
+# ─── GitHub Integration (Autopatch) ──────────────────────────
+PyGithub==2.4.0
+
+# ─── Embeddings & ML ─────────────────────────────────────────
+torch==2.4.0
+numpy==1.26.4
+
+# ─── Environment ─────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ─── Logging & Monitoring ────────────────────────────────────
+sentry-sdk[fastapi]==2.14.0
+loguru==0.7.2
+
+# ─── Testing ─────────────────────────────────────────────────
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
+httpx==0.27.2
+locust==2.31.0

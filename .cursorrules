@@ -1,0 +1,106 @@
+# SENTINEL AI — CURSOR MASTER CONTEXT
+# Paste this as your Cursor Project Rule. Every prompt in this project
+# will automatically follow these conventions. Do not edit without 
+# team agreement.
+
+## PROJECT OVERVIEW
+We are building Sentinel AI, an autonomous multi-agent AI security 
+testing platform. Clients give us authorized access to their full AI 
+infrastructure. Our agents test it component by component, learn from 
+results, mutate attacks, and generate vulnerability reports.
+
+## SYSTEM ARCHITECTURE
+- 5 agents: ReconAgent, AttackAgent, MutationAgent, ReportAgent, AutopatchAgent
+- 1 orchestrator: LangGraph state machine managing agent flow
+- 1 shared brain: ChromaDB vector database all agents read/write
+- 1 API server: FastAPI with WebSocket for live dashboard
+- 1 frontend: React + TailwindCSS war room dashboard
+
+## TECH STACK
+Backend: Python 3.11, FastAPI, LangGraph, CrewAI
+LLMs: Groq (Llama 3.1 70B) for attacks, Anthropic Claude for reports, 
+      Ollama Mistral 7B for local/sensitive inference
+Vector DB: ChromaDB with sentence-transformers all-MiniLM-L6-v2
+Task Queue: Celery + Redis
+Database: PostgreSQL with SQLAlchemy ORM + Alembic migrations
+Frontend: React 18 + Vite + TailwindCSS + Zustand + D3.js + Recharts
+Real-time: FastAPI WebSockets
+Testing: pytest + pytest-asyncio + pytest-mock
+
+## NAMING CONVENTIONS — NEVER DEVIATE
+Classes:        PascalCase              (ReconAgent, AttackResult)
+Agent classes:  PascalCase + Agent      (ReconAgent, MutationAgent)
+Functions:      snake_case              (execute_attack, log_result)
+Async funcs:    snake_case              (async def run_scan)
+Variables:      snake_case              (scan_id, client_id)
+Constants:      UPPER_SNAKE_CASE        (MAX_ITERATIONS, SUCCESS_THRESHOLD)
+Pydantic models: PascalCase + Schema   (AttackResultSchema, ComponentSchema)
+ChromaDB collections: snake_case       (attack_history, scan_results)
+Env variables:  UPPER_SNAKE_CASE       (GROQ_API_KEY, CHROMA_HOST)
+File names:     snake_case.py          (recon_agent.py, base_agent.py)
+React components: PascalCase.jsx       (WarRoom.jsx, AttackFeed.jsx)
+
+## CODE STYLE RULES — ALWAYS FOLLOW
+1. Every function and class must have a docstring
+2. Every function parameter must have a type hint
+3. Every function must have a return type hint
+4. Use Pydantic models for ALL data structures passed between agents
+5. Use async/await for ALL I/O operations (HTTP, DB, LLM calls)
+6. Never hardcode any value that exists in constants.py — always import
+7. Never hardcode API keys — always use os.getenv()
+8. Every agent class must inherit from BaseAgent in agents/base_agent.py
+9. All ChromaDB queries MUST include client_id filter — no exceptions
+10. All error handling must use try/except with specific exception types
+11. Log every significant action using Python logging module, not print()
+
+## FOLDER STRUCTURE
+sentinel-core/
+├── backend/
+│   ├── main.py              # FastAPI app entry point
+│   ├── models/              # SQLAlchemy DB models
+│   ├── schemas/             # Pydantic schemas
+│   ├── routers/             # FastAPI route handlers
+│   └── websocket/           # WebSocket connection manager
+├── agents/
+│   ├── base_agent.py        # BaseAgent class — all agents inherit this
+│   ├── orchestrator.py      # LangGraph state machine
+│   ├── recon_agent.py
+│   ├── attack_agent.py
+│   ├── mutation_agent.py
+│   ├── report_agent.py
+│   └── autopatch_agent.py
+├── knowledge_base/
+│   ├── chroma_client.py     # ChromaDB connection
+│   └── knowledge_base.py    # KnowledgeBase class
+├── domains/
+│   ├── domain_library.py    # DomainLibrary class
+│   └── templates/           # JSON attack template files per domain
+├── frontend/
+│   └── src/
+│       ├── components/      # React components
+│       ├── store/           # Zustand state
+│       └── hooks/           # Custom React hooks
+├── tests/
+├── constants.py             # ALL shared constants live here
+├── .env.example
+├── .cursorrules             # This file
+├── docker-compose.yml
+└── requirements.txt
+
+## IMPORTS ORDER (follow this exactly)
+1. Standard library imports
+2. Third party imports
+3. Local imports (from agents.base_agent import BaseAgent)
+
+## AGENT COMMUNICATION PATTERN
+All agents communicate ONLY through:
+1. The LangGraph state object (for workflow state)
+2. ChromaDB (for knowledge and results)
+Never pass data between agents directly as function arguments.
+
+## SECURITY RULES (NON-NEGOTIABLE)
+1. Every scan requires a valid consent_id in the database before starting
+2. All ChromaDB queries filter by client_id
+3. No attack executes without the scan being in ACTIVE status in PostgreSQL
+4. Autopatch agent checks approved_findings list before every patch action
+5. All client credentials are stored encrypted, never in plain text
