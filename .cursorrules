@@ -1,106 +1,216 @@
 # SENTINEL AI — CURSOR MASTER CONTEXT
-# Paste this as your Cursor Project Rule. Every prompt in this project
-# will automatically follow these conventions. Do not edit without 
-# team agreement.
+# ============================================================
+# This is the Cursor Project Rule for sentinel-core.
+# Every prompt in this project automatically follows these
+# conventions. Do NOT edit without full team agreement.
+# ============================================================
 
 ## PROJECT OVERVIEW
-We are building Sentinel AI, an autonomous multi-agent AI security 
-testing platform. Clients give us authorized access to their full AI 
-infrastructure. Our agents test it component by component, learn from 
-results, mutate attacks, and generate vulnerability reports.
+We are building Sentinel AI, an autonomous multi-agent AI 
+security testing platform. Clients give us authorized, 
+consent-based access to their full AI infrastructure. Our 
+system tests it component by component, learns from results, 
+evolves attacks, generates vulnerability reports, and applies 
+patches — all automated, all visible live on a war room dashboard.
 
 ## SYSTEM ARCHITECTURE
-- 5 agents: ReconAgent, AttackAgent, MutationAgent, ReportAgent, AutopatchAgent
-- 1 orchestrator: LangGraph state machine managing agent flow
+- 5 agents: ReconAgent, AttackAgent, MutationAgent, 
+            ReportAgent, AutopatchAgent
+- 1 orchestrator: LangGraph state machine (agents/orchestrator.py)
 - 1 shared brain: ChromaDB vector database all agents read/write
+- 1 knowledge base: KnowledgeBase class (knowledge_base/knowledge_base.py)
+- 1 domain library: DomainLibrary class (domains/domain_library.py)
 - 1 API server: FastAPI with WebSocket for live dashboard
 - 1 frontend: React + TailwindCSS war room dashboard
+- 1 dummy target: Vulnerable test app for development testing
 
 ## TECH STACK
-Backend: Python 3.11, FastAPI, LangGraph, CrewAI
-LLMs: Groq (Llama 3.1 70B) for attacks, Anthropic Claude for reports, 
-      Ollama Mistral 7B for local/sensitive inference
-Vector DB: ChromaDB with sentence-transformers all-MiniLM-L6-v2
-Task Queue: Celery + Redis
-Database: PostgreSQL with SQLAlchemy ORM + Alembic migrations
-Frontend: React 18 + Vite + TailwindCSS + Zustand + D3.js + Recharts
-Real-time: FastAPI WebSockets
-Testing: pytest + pytest-asyncio + pytest-mock
+Backend:      Python 3.11, FastAPI (async), LangGraph, CrewAI
+LLMs:         Groq (Llama 3.1 70B) for recon + attacks
+              Groq (Qwen 2.5 72B) for mutation
+              Google Gemini Flash for report generation
+              Google Gemini Pro for autopatch code generation
+              DeepSeek as backup for code generation
+              Ollama Mistral 7B for local/offline inference
+Vector DB:    ChromaDB with sentence-transformers all-MiniLM-L6-v2
+Task Queue:   Celery + Redis (Upstash free tier)
+Database:     PostgreSQL (Supabase free tier) + SQLAlchemy 2.0 async
+Migrations:   Alembic
+HTTP Client:  httpx (async)
+Validation:   Pydantic v2
+Auth:         JWT via python-jose + passlib
+Gemini:       google-generativeai Python SDK (pip install google-generativeai)
+Frontend:     React 18 + Vite + TailwindCSS + Zustand + D3.js + Recharts
+Components:   shadcn/ui
+Real-time:    FastAPI WebSockets (native browser WebSocket API on frontend)
+Routing:      React Router v6
+Testing:      pytest + pytest-asyncio + pytest-mock
+Secrets:      python-dotenv (.env file, never committed to GitHub)
+
+## MODELS PER AGENT
+ReconAgent:     Groq llama-3.1-70b-versatile
+AttackAgent:    Groq llama-3.1-70b-versatile
+MutationAgent:  Groq qwen-2.5-72b-instruct
+ReportAgent:    Google gemini-1.5-flash
+AutopatchAgent: Google gemini-1.5-pro
+Local fallback: Ollama mistral (when no internet or sensitive data)
+
+## API KEY ROTATION
+Multiple keys per provider stored in .env as:
+GROQ_API_KEY_1, GROQ_API_KEY_2 ... GROQ_API_KEY_5
+GEMINI_API_KEY_1, GEMINI_API_KEY_2 ... GEMINI_API_KEY_5
+DEEPSEEK_API_KEY_1 ... DEEPSEEK_API_KEY_5
+
+Use get_next_key(GROQ_KEYS, attempt) from constants.py to rotate.
+Never hardcode a single key directly. Always use the rotator.
 
 ## NAMING CONVENTIONS — NEVER DEVIATE
-Classes:        PascalCase              (ReconAgent, AttackResult)
-Agent classes:  PascalCase + Agent      (ReconAgent, MutationAgent)
-Functions:      snake_case              (execute_attack, log_result)
-Async funcs:    snake_case              (async def run_scan)
-Variables:      snake_case              (scan_id, client_id)
-Constants:      UPPER_SNAKE_CASE        (MAX_ITERATIONS, SUCCESS_THRESHOLD)
-Pydantic models: PascalCase + Schema   (AttackResultSchema, ComponentSchema)
-ChromaDB collections: snake_case       (attack_history, scan_results)
-Env variables:  UPPER_SNAKE_CASE       (GROQ_API_KEY, CHROMA_HOST)
-File names:     snake_case.py          (recon_agent.py, base_agent.py)
-React components: PascalCase.jsx       (WarRoom.jsx, AttackFeed.jsx)
+Classes:             PascalCase              (ReconAgent, AttackResult)
+Agent classes:       PascalCase + Agent      (ReconAgent, MutationAgent)
+Functions:           snake_case              (execute_attack, log_result)
+Async functions:     snake_case              (async def run_scan)
+Variables:           snake_case              (scan_id, client_id)
+Constants:           UPPER_SNAKE_CASE        (MAX_ITERATIONS, SUCCESS_THRESHOLD)
+Pydantic models:     PascalCase + Schema     (AttackResultSchema, ComponentSchema)
+ChromaDB collections: snake_case            (attack_history, scan_results)
+Env variables:       UPPER_SNAKE_CASE        (GROQ_API_KEY_1, GEMINI_API_KEY_1)
+Python files:        snake_case.py           (recon_agent.py, base_agent.py)
+React components:    PascalCase.jsx          (WarRoom.jsx, AttackFeed.jsx)
+Zustand stores:      camelCase + Store.js    (scanStore.js)
+React hooks:         use + PascalCase.js     (useWebSocket.js)
 
 ## CODE STYLE RULES — ALWAYS FOLLOW
-1. Every function and class must have a docstring
-2. Every function parameter must have a type hint
-3. Every function must have a return type hint
-4. Use Pydantic models for ALL data structures passed between agents
-5. Use async/await for ALL I/O operations (HTTP, DB, LLM calls)
-6. Never hardcode any value that exists in constants.py — always import
-7. Never hardcode API keys — always use os.getenv()
-8. Every agent class must inherit from BaseAgent in agents/base_agent.py
-9. All ChromaDB queries MUST include client_id filter — no exceptions
+1.  Every function and class must have a docstring
+2.  Every function parameter must have a type hint
+3.  Every function must have a return type hint
+4.  Use Pydantic v2 models for ALL data passed between agents
+5.  Use async/await for ALL I/O (HTTP, DB, LLM calls, ChromaDB)
+6.  Never hardcode any value that exists in constants.py — always import
+7.  Never hardcode API keys — always use get_next_key() from constants.py
+8.  Every agent class must inherit from BaseAgent in agents/base_agent.py
+9.  All ChromaDB queries MUST include where={"client_id": client_id} — NO EXCEPTIONS
 10. All error handling must use try/except with specific exception types
-11. Log every significant action using Python logging module, not print()
+11. Use Python logging module everywhere — never use print()
+12. Call load_dotenv() at the top of every file that reads env vars
+13. Use get_next_key() for all LLM API calls — never use a single key directly
+14. Imports order: stdlib → third party → local (from constants import ...)
+15. All constants imported from constants.py at top of every file that needs them
 
 ## FOLDER STRUCTURE
 sentinel-core/
 ├── backend/
-│   ├── main.py              # FastAPI app entry point
-│   ├── models/              # SQLAlchemy DB models
-│   ├── schemas/             # Pydantic schemas
-│   ├── routers/             # FastAPI route handlers
-│   └── websocket/           # WebSocket connection manager
+│   ├── __init__.py
+│   ├── main.py              # FastAPI app entry point + WebSocket
+│   ├── models.py            # SQLAlchemy DB models
+│   ├── schemas/
+│   │   └── events.py        # Pydantic WebSocket event schemas
+│   ├── routers/
+│   │   └── scans.py         # Scan REST endpoints
+│   └── websocket/
+│       └── connection_manager.py  # WebSocket connection manager
 ├── agents/
-│   ├── base_agent.py        # BaseAgent class — all agents inherit this
+│   ├── __init__.py
+│   ├── base_agent.py        # BaseAgent — ALL agents inherit this
 │   ├── orchestrator.py      # LangGraph state machine
-│   ├── recon_agent.py
-│   ├── attack_agent.py
-│   ├── mutation_agent.py
-│   ├── report_agent.py
-│   └── autopatch_agent.py
+│   ├── recon_agent.py       # ReconAgent
+│   ├── attack_agent.py      # AttackAgent
+│   ├── mutation_agent.py    # MutationAgent
+│   ├── report_agent.py      # ReportAgent
+│   └── autopatch_agent.py   # AutopatchAgent
 ├── knowledge_base/
-│   ├── chroma_client.py     # ChromaDB connection
-│   └── knowledge_base.py    # KnowledgeBase class
+│   ├── __init__.py
+│   ├── chroma_client.py     # ChromaDB singleton client
+│   └── knowledge_base.py    # KnowledgeBase class with all methods
 ├── domains/
+│   ├── __init__.py
 │   ├── domain_library.py    # DomainLibrary class
-│   └── templates/           # JSON attack template files per domain
+│   └── templates/           # JSON attack template files
+│       ├── prompt_injection.json         (20 templates)
+│       ├── rag_poisoning.json            (15 templates)
+│       ├── api_attacks.json              (15 templates)
+│       ├── indirect_injection.json       (12 templates)
+│       └── system_prompt_extraction.json (10 templates)
+├── dummy_target/
+│   └── app.py               # Vulnerable test app — agents attack this during dev
 ├── frontend/
 │   └── src/
-│       ├── components/      # React components
-│       ├── store/           # Zustand state
-│       └── hooks/           # Custom React hooks
+│       ├── components/
+│       │   ├── WarRoom.jsx           # Main dashboard container
+│       │   ├── InfrastructureMap.jsx # D3.js force graph of client components
+│       │   ├── AttackFeed.jsx        # Live scrolling attack event log
+│       │   ├── AgentStatusBar.jsx    # 5 agent status indicators
+│       │   ├── SeverityHeatmap.jsx   # Component vs domain severity grid
+│       │   └── ScoreChart.jsx        # Recharts mutation progress line chart
+│       ├── store/
+│       │   └── scanStore.js          # Zustand global state for scan events
+│       └── hooks/
+│           └── useWebSocket.js       # WebSocket connection + auto-reconnect
 ├── tests/
-├── constants.py             # ALL shared constants live here
-├── .env.example
-├── .cursorrules             # This file
-├── docker-compose.yml
-└── requirements.txt
+│   ├── __init__.py
+│   ├── test_week1_smoke.py   # Week 1 smoke tests
+│   └── test_base_agent.py    # BaseAgent unit tests
+├── constants.py              # ALL shared constants — import from here
+├── .cursorrules              # This file
+├── .env                      # Real keys — NEVER commit to GitHub
+├── .env.example              # Template with placeholders — commit this
+├── .gitignore                # Must include .env
+├── docker-compose.yml        # Local dev services
+├── requirements.txt          # All Python dependencies
+└── README.md
 
-## IMPORTS ORDER (follow this exactly)
-1. Standard library imports
-2. Third party imports
-3. Local imports (from agents.base_agent import BaseAgent)
+## BASE AGENT CLIENTS
+BaseAgent initializes these LLM clients available to every agent:
+  self.groq      — AsyncGroq (groq library) — for Llama 3.1 70B + Qwen 72B
+  self.gemini    — google.generativeai (google-generativeai library) — for Gemini Flash + Pro
+  self.deepseek  — AsyncOpenAI with base_url="https://api.deepseek.com" — for DeepSeek backup
+  self.anthropic — AsyncAnthropic (optional, demo only)
+
+When generating BaseAgent or any agent code, always include
+the Gemini client using google.generativeai library.
+Use the ASYNC version — never the sync version:
+  import google.generativeai as genai
+  genai.configure(api_key=get_next_key(GEMINI_KEYS, attempt))
+  model = genai.GenerativeModel(LLMModel.GEMINI_FLASH)
+  response = await model.generate_content_async(prompt)
+  result = response.text
+
+Never use model.generate_content() (sync) — always generate_content_async().
 
 ## AGENT COMMUNICATION PATTERN
-All agents communicate ONLY through:
-1. The LangGraph state object (for workflow state)
-2. ChromaDB (for knowledge and results)
-Never pass data between agents directly as function arguments.
+Agents communicate ONLY through:
+1. LangGraph state object — for workflow state and phase transitions
+2. ChromaDB — for all knowledge, attack history, and results
+NEVER pass data between agents directly as function arguments.
+NEVER use global variables to share state between agents.
 
-## SECURITY RULES (NON-NEGOTIABLE)
-1. Every scan requires a valid consent_id in the database before starting
-2. All ChromaDB queries filter by client_id
-3. No attack executes without the scan being in ACTIVE status in PostgreSQL
-4. Autopatch agent checks approved_findings list before every patch action
-5. All client credentials are stored encrypted, never in plain text
+## CHROMADB RULES
+Every query to ChromaDB MUST include client_id filter:
+  collection.query(where={"client_id": client_id}, ...)
+Every record stored MUST include client_id in metadata.
+This is a hard security rule. No exceptions. Ever.
+Collections: attack_history, successful_attacks, mutation_lineage,
+             component_profiles, vulnerability_catalog
+
+## WEBSOCKET EVENTS
+All backend events broadcast as JSON with fields:
+  scan_id, timestamp, event_type (from WSEvent constants)
+Event types: agent_started, attack_executed, mutation_occurred,
+             vulnerability_found, component_complete, scan_complete,
+             critical_halt, progress_update
+Frontend Zustand store handles each event type with a dedicated action.
+
+## SECURITY RULES — NON-NEGOTIABLE
+1. Every scan requires a valid consent_id in PostgreSQL before starting
+2. No attack executes without scan status = ACTIVE in database
+3. All ChromaDB queries filter by client_id — zero exceptions
+4. AutopatchAgent checks approved_findings list before every single patch
+5. Client credentials stored encrypted — never plain text
+6. .env file never committed to GitHub under any circumstances
+7. API keys never typed into any chat, Discord, WhatsApp, or Notion
+
+## SCORE TO ACTION MAPPING
+0.0 - 0.09: No effect — log and continue
+0.1 - 0.39: Low — log, low priority mutation
+0.4 - 0.69: Medium — feed to MutationAgent
+0.7 - 0.89: High — flag as vulnerability, continue scan
+0.9 - 1.0:  CRITICAL — halt scan immediately, alert client, broadcast WSEvent.CRITICAL_HALT
