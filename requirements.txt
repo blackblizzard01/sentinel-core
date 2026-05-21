@@ -11,9 +11,10 @@ python-multipart==0.0.9
 
 # ─── Agent Orchestration ─────────────────────────────────────
 langgraph==0.2.0
-langchain==0.3.0
-langchain-community==0.3.0
+langchain==0.2.16
+langchain-community==0.2.16
 crewai==0.67.0
+embedchain==0.1.114
 
 # ─── LLM SDKs ────────────────────────────────────────────────
 groq==0.11.0
@@ -22,14 +23,14 @@ openai==1.51.0
 google-generativeai==0.8.0
 
 # ─── Vector Database ─────────────────────────────────────────
-chromadb==0.5.0
+chromadb==0.4.24
 sentence-transformers==3.1.0
 
 # ─── Database ────────────────────────────────────────────────
 sqlalchemy==2.0.35
 alembic==1.13.3
 asyncpg==0.29.0
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 
 # ─── Task Queue ──────────────────────────────────────────────
 celery==5.4.0
