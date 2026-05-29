@@ -1,0 +1,7 @@
+{
+  "_schema": "Each object: {id, name, template, expected_indicators, severity_potential, domain}",
+  "_target_count": 12,
+  "_owner": "AI Security Lead — Week 4",
+  "_reference": "Greshake et al. 2023, Morris II Comaromi et al. 2024",
+  "templates": []
+}

@@ -1,0 +1,7 @@
+{
+  "_schema": "Each object: {id, name, template, expected_indicators, severity_potential, domain}",
+  "_target_count": 15,
+  "_owner": "AI Security Lead — Week 4",
+  "_reference": "Semantic Chameleon arXiv 2026, Greshake et al. 2023",
+  "templates": []
+}

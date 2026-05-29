@@ -1,0 +1,7 @@
+{
+  "_schema": "Each object: {id, name, template, expected_indicators, severity_potential, domain}",
+  "_target_count": 15,
+  "_owner": "AI Security Lead — Week 4",
+  "_reference": "OWASP API Security Top 10, OWASP LLM Top 10 2025",
+  "templates": []
+}

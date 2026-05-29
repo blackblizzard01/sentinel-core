@@ -1,0 +1,7 @@
+{
+  "_schema": "Each object: {id, name, template, expected_indicators, severity_potential, domain}",
+  "_target_count": 20,
+  "_owner": "AI Security Lead — Week 2",
+  "_reference": "OWASP LLM01:2025, Zou et al. 2023, MDPI 2026 Prompt Injection Review",
+  "templates": []
+}

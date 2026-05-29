@@ -176,23 +176,22 @@ CHROMA_COLLECTIONS = [
 
 # ─── LLM MODELS ──────────────────────────────────────────────
 class LLMModel:
-    # Groq hosted (free — console.groq.com)
-    LLAMA_70B    = "llama-3.1-70b-versatile"   # Main attack + recon model
-    LLAMA_8B     = "llama-3.1-8b-instant"       # Fast lightweight tasks
-    QWEN_72B     = "qwen-2.5-72b-instruct"      # Mutation agent (replaces GPT-4o mini)
+    # ── Active models (keys present in .env) ──────────────────
+    LLAMA_70B      = "llama-3.1-70b-versatile"   # Groq — Recon + Attack
+    GEMINI_FLASH   = "gemini-2.0-flash"          # Gemini — Report + Autopatch
+    MISTRAL_LOCAL  = "mistral"                   # Ollama — air-gapped clients
+    DEEPSEEK_CODER = "deepseek-coder"            # DeepSeek — Autopatch backup
 
-    # Google Gemini (free — aistudio.google.com)
-    GEMINI_FLASH = "gemini-1.5-flash"           # ReportAgent (fast, free)
-    GEMINI_PRO   = "gemini-1.5-pro"             # AutopatchAgent (higher quality)
+    # ── Demo-only (keys commented out in .env — do not use in agents) ──
+    CLAUDE_SONNET = "claude-sonnet-4-20250514"   # Investor demo only
+    GPT4O_MINI    = "gpt-4o-mini"                # Backup — no active key
 
-    # DeepSeek (free credits — platform.deepseek.com)
-    DEEPSEEK     = "deepseek-chat"              # Backup for code generation
-
-    # Anthropic (optional — save for final demo only)
-    CLAUDE_SONNET = "claude-sonnet-4-20250514"
-
-    # Local via Ollama (completely free, no API needed)
-    MISTRAL_LOCAL = "mistral"
+    # ── Legacy / retained constants (do not remove) ───────────
+    LLAMA_8B  = "llama-3.1-8b-instant"
+    QWEN_72B  = "qwen-2.5-72b-instruct"
+    GEMINI_PRO = "gemini-1.5-pro"
+    DEEPSEEK  = "deepseek-chat"
+    MISTRAL   = "mistral"
 
 # ─── AGENT MODEL ASSIGNMENTS ─────────────────────────────────
 # Change model per agent here — propagates everywhere automatically
@@ -201,7 +200,7 @@ AGENT_MODELS = {
     AgentName.ATTACK:     LLMModel.LLAMA_70B,    # High volume attack generation
     AgentName.MUTATION:   LLMModel.QWEN_72B,     # Creative mutation via Groq (free)
     AgentName.REPORT:     LLMModel.GEMINI_FLASH, # Report generation (free)
-    AgentName.AUTOPATCH:  LLMModel.GEMINI_PRO,   # Code patch generation (free)
+    AgentName.AUTOPATCH:  LLMModel.GEMINI_FLASH, # Code patch generation (free)
 }
 
 # Fallback model if primary fails
@@ -233,19 +232,14 @@ DEEPSEEK_KEYS = _load_keys("DEEPSEEK_API_KEY")
 
 def get_next_key(keys: list[str], attempt: int) -> str:
     """
-    Rotate through available API keys based on attempt count.
-    Prevents single key from hitting rate limits.
-
-    Args:
-        keys: List of available API keys
-        attempt: Current attempt number (used for rotation)
-
-    Returns:
-        Next API key to use
+    Rotate through API keys using attempt index.
+    Returns the key at position (attempt % len(keys)).
+    Raises ValueError if all keys are empty strings.
     """
-    if not keys:
-        raise ValueError("No API keys available. Check your .env file.")
-    return keys[attempt % len(keys)]
+    valid_keys = [k for k in keys if k]
+    if not valid_keys:
+        raise ValueError("No valid API keys found in key list")
+    return valid_keys[attempt % len(valid_keys)]
 
 # ─── EMBEDDING MODEL ─────────────────────────────────────────
 EMBEDDING_MODEL      = "all-MiniLM-L6-v2"   # Local, free, runs on CPU
