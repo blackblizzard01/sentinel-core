@@ -503,22 +503,6 @@ self.model       # from AGENT_MODELS dict in constants.py
 
 ---
 
-## SECTION 15 — CURRENT BUILD STATUS
-
-Week 1 and 2 tasks are defined.
-Following the 8 week build plan:
-
-Week 1: Foundation (repo, DB schema, FastAPI, ChromaDB KB, 
-         LangGraph skeleton)
-Week 2: Recon Agent + Attack Agent + domain templates
-Week 3: Mutation Agent + Vector KB intelligence loop
-Week 4: Expand attack domains + multi-component pipeline
-Week 5: Report Agent + PDF generation
-Week 6: Live war room dashboard (React + WebSocket + D3.js)
-Week 7: Autopatch Agent + client portal
-Week 8: Testing + hardening + demo prep
-
----
 
 ## HOW TO USE THIS BIBLE
 
