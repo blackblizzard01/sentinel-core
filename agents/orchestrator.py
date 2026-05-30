@@ -27,6 +27,7 @@ class ScanState(TypedDict):
     logs: list
     critical_halt: bool
     components: list
+    manifest: dict
     approved_findings: list
     report_path: str
     report_json: dict
@@ -133,6 +134,7 @@ async def run_scan(client_id: str, scan_id: str) -> ScanState:
         "logs": [],
         "critical_halt": False,
         "components": [],
+        "manifest": {"components": []},
         "approved_findings": [],
         "report_path": "",
         "report_json": {},
