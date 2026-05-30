@@ -186,7 +186,8 @@ class LLMModel:
     GEMINI_PRO   = "gemini-1.5-pro"             # AutopatchAgent (higher quality)
 
     # DeepSeek (free credits — platform.deepseek.com)
-    DEEPSEEK     = "deepseek-chat"              # Backup for code generation
+    DEEPSEEK_CHAT = "deepseek-chat"            # MutationAgent (OpenAI-compatible API)
+    DEEPSEEK        = "deepseek-chat"           # Backup for code generation
 
     # Anthropic (optional — save for final demo only)
     CLAUDE_SONNET = "claude-sonnet-4-20250514"
@@ -199,9 +200,9 @@ class LLMModel:
 AGENT_MODELS = {
     AgentName.RECON:      LLMModel.LLAMA_70B,    # Fast recon probing
     AgentName.ATTACK:     LLMModel.LLAMA_70B,    # High volume attack generation
-    AgentName.MUTATION:   LLMModel.QWEN_72B,     # Creative mutation via Groq (free)
+    AgentName.MUTATION:   LLMModel.DEEPSEEK_CHAT, # Creative mutation via DeepSeek
     AgentName.REPORT:     LLMModel.GEMINI_FLASH, # Report generation (free)
-    AgentName.AUTOPATCH:  LLMModel.GEMINI_PRO,   # Code patch generation (free)
+    AgentName.AUTOPATCH:  LLMModel.GEMINI_FLASH, # Code patch generation (free)
 }
 
 # Fallback model if primary fails
@@ -294,7 +295,7 @@ def validate_environment() -> dict[str, bool]:
         "GEMINI_KEYS":   len(GEMINI_KEYS) > 0,
         "DATABASE_URL":  bool(os.getenv("DATABASE_URL") and "paste" not in str(os.getenv("DATABASE_URL"))),
         "REDIS_URL":     bool(os.getenv("REDIS_URL") and "paste" not in str(os.getenv("REDIS_URL"))),
-        "SECRET_KEY":    bool(os.getenv("SECRET_KEY") and len(str(os.getenv("SECRET_KEY"))) >= 16),
+        "SECRET_KEY":    bool(os.getenv("JWT_SECRET") and len(str(os.getenv("JWT_SECRET"))) >= 16),
         "GITHUB_TOKEN":  bool(os.getenv("GITHUB_TOKEN") and "paste" not in str(os.getenv("GITHUB_TOKEN"))),
     }
     missing = [k for k, v in checks.items() if not v]
