@@ -184,6 +184,7 @@ class LLMModel:
     # Google Gemini (free — aistudio.google.com)
     GEMINI_FLASH = "gemini-1.5-flash"           # ReportAgent (fast, free)
     GEMINI_PRO   = "gemini-1.5-pro"             # AutopatchAgent (higher quality)
+    GEMINI       = GEMINI_FLASH                 # Alias used by BaseAgent
 
     # DeepSeek (free credits — platform.deepseek.com)
     DEEPSEEK_CHAT = "deepseek-chat"            # MutationAgent (OpenAI-compatible API)

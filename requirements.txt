@@ -19,7 +19,9 @@ embedchain==0.1.114
 # ─── LLM SDKs ────────────────────────────────────────────────
 groq==0.11.0
 google-genai==1.16.0
-openai==1.51.0 
+google-generativeai==0.8.3
+openai==1.51.0
+tenacity==9.0.0 
 
 # ─── Vector Database ─────────────────────────────────────────
 chromadb==0.4.24
