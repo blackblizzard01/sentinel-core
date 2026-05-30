@@ -38,13 +38,29 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+class ComponentDict(TypedDict):
+    """
+    Shape of each component dict stored in ScanState.components.
+    ReconAgent must return dicts matching this shape in Week 2.
+    Strict typing here surfaces key-name mismatches at development time,
+    not at runtime mid-scan.
+    """
+
+    component_id: str
+    type: str            # ComponentType constant string
+    endpoint: str
+    framework: str       # empty string if unknown
+    priority_score: float
+    estimated_attack_domains: list  # list[str] — populated by ReconAgent
+
+
 class ScanState(TypedDict):
     """LangGraph state passed between orchestrator nodes."""
 
     client_id: str
     scan_id: str
     current_component_index: int
-    current_component: dict
+    current_component: dict          # ComponentDict at runtime
     current_domain_index: int
     current_domain: str
     attack_results: list
@@ -52,7 +68,7 @@ class ScanState(TypedDict):
     phase: str
     logs: list
     critical_halt: bool
-    components: list
+    components: list                 # list[ComponentDict] — populated by ReconAgent
     approved_findings: list
     report_path: str
     report_json: dict

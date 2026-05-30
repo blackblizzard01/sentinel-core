@@ -77,6 +77,7 @@ class KnowledgeBase:
         payload: str,
         response: str,
         score: float,
+        component_type: str = "",  # Week 2+: pass ComponentType constant so mutation retrieval is per-component
         timestamp: Optional[str] = None,
     ) -> str:
         """
@@ -96,6 +97,7 @@ class KnowledgeBase:
                 "score": score,
                 "timestamp": attack_timestamp,
                 "attack_id": attack_id,
+                "component_type": component_type,  # stored so get_top_attacks can filter per-component
             }
 
             await asyncio.to_thread(
@@ -133,11 +135,22 @@ class KnowledgeBase:
         Returns list of metadata dicts.
         """
         try:
+            # Guard: ChromaDB raises if n_results > collection size
+            count: int = await asyncio.to_thread(self.successful_attacks.count)
+            if count == 0:
+                return []
+            n: int = min(k, count)
+            # Filter by both client_id and component_type when component_type is set
+            where_filter: dict = (
+                {"$and": [{"client_id": client_id}, {"component_type": component_type}]}
+                if component_type
+                else {"client_id": client_id}
+            )
             results: dict[str, Any] = await asyncio.to_thread(
                 self.successful_attacks.query,
                 query_texts=[f"{domain} {component_type}"],
-                n_results=k,
-                where={"client_id": client_id},
+                n_results=n,
+                where=where_filter,
                 include=["metadatas", "documents", "distances"],
             )
             metadatas: list[list[dict]] | None = results.get("metadatas")
@@ -298,11 +311,14 @@ class KnowledgeBase:
         Returns list of metadata dicts.
         """
         try:
+            count: int = await asyncio.to_thread(self.component_profiles.count)
+            if count == 0:
+                return []
             results: dict[str, Any] = await asyncio.to_thread(
                 self.component_profiles.query,
                 query_texts=[scan_id],
-                n_results=100,
-                where={"client_id": client_id},
+                n_results=min(100, count),
+                where={"$and": [{"client_id": client_id}, {"scan_id": scan_id}]},
                 include=["metadatas"],
             )
             metadatas: list[list[dict]] | None = results.get("metadatas")
@@ -324,11 +340,14 @@ class KnowledgeBase:
         Returns list of metadata dicts.
         """
         try:
+            count: int = await asyncio.to_thread(self.vulnerability_catalog.count)
+            if count == 0:
+                return []
             results: dict[str, Any] = await asyncio.to_thread(
                 self.vulnerability_catalog.query,
                 query_texts=[scan_id],
-                n_results=500,
-                where={"client_id": client_id},
+                n_results=min(500, count),
+                where={"$and": [{"client_id": client_id}, {"scan_id": scan_id}]},
                 include=["metadatas"],
             )
             metadatas: list[list[dict]] | None = results.get("metadatas")

@@ -1,16 +1,15 @@
 import asyncio
 from agents.orchestrator import SentinelOrchestrator
 
-async def test():
-    orchestrator = SentinelOrchestrator()
-    final_state = await orchestrator.run_scan(
-        client_id='test-client-001',
-        scan_id='test-scan-001'
+async def run():
+    o = SentinelOrchestrator()
+    final = await o.run_scan(
+        client_id='a5dd7c5b-c9ed-474d-afbd-06c3f0eb9a21',
+        scan_id='963cc47c-dd82-4d4c-bc3a-11f0e67de7f3'
     )
-    print('Final phase  :', final_state['phase'])
-    print('Logs         :', final_state['logs'])
-    print('Attack results:', len(final_state['attack_results']))
-    print('Report path  :', final_state['report_path'])
-    print('SCAN COMPLETE OK')
+    print('Phase      :', final['phase'])
+    print('Logs       :', final['logs'])
+    print('Attacks    :', len(final['attack_results']))
+    print('Report path:', final['report_path'])
 
-asyncio.run(test())
+asyncio.run(run())

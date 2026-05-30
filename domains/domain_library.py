@@ -89,3 +89,21 @@ class DomainLibrary:
     def get_domain_count(self, domain: str) -> int:
         """Return number of templates available for a domain."""
         return len(self.get_templates(domain))
+
+    def get_templates_for_component(self, component_type: str) -> list[str]:
+        """
+        Return the list of AttackDomain strings applicable to a given component type.
+
+        Called by AttackAgent to determine which domains to test for each component.
+        Wraps DOMAIN_COMPONENT_MAP so the AttackAgent never imports constants directly
+        and the mapping stays centrally managed.
+
+        Args:
+            component_type: ComponentType constant string (e.g. ComponentType.LLM_MODEL).
+
+        Returns:
+            List of AttackDomain constant strings for this component type.
+            Empty list if component_type is unrecognized.
+        """
+        from constants import DOMAIN_COMPONENT_MAP
+        return DOMAIN_COMPONENT_MAP.get(component_type, [])

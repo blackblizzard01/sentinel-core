@@ -1,11 +1,11 @@
 """REST API router for Sentinel AI scan operations."""
 
+import asyncio
 import logging
 import uuid
 from uuid import UUID
 from typing import Optional
 from datetime import datetime
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi import status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -239,7 +239,7 @@ async def start_scan(
         409: Scan not in startable state (not PENDING).
         403: No valid consent record for this scan (legal gate).
     """
-    from agents.orchestrator import SentinelOrchestrator
+    from agents.orchestrator import SentinelOrchestrator  # local import � avoids circular at module load
     from backend.models import Scan, Consent
     from sqlalchemy import select
     from constants import ScanStatus
@@ -292,3 +292,78 @@ async def start_scan(
         "status": "accepted",
         "note": "BackgroundTasks runner active. Celery migration planned for Week 8.",
     }
+
+
+@router.post(
+    "/{scan_id}/run",
+    status_code=http_status.HTTP_200_OK,
+    summary="Trigger orchestrator for an existing scan (in-process)",
+    description=(
+        "Runs the LangGraph orchestrator inside the FastAPI event loop via "
+        "asyncio.create_task(). The API returns immediately. Because the task "
+        "runs in the same process, the WebSocket ConnectionManager singleton is "
+        "the same instance the browser is already connected to — events are "
+        "delivered live without any cross-process plumbing."
+    ),
+)
+async def run_scan(
+    scan_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Trigger the orchestrator for a given scan_id.
+
+    Looks up the scan record to obtain client_id, then fires
+    orchestrator.run_scan() as a background asyncio task so this
+    endpoint returns immediately while the scan runs in the background.
+
+    Args:
+        scan_id: String UUID of an existing scan.
+        db: Async database session (injected by FastAPI).
+
+    Returns:
+        {"status": "started", "scan_id": scan_id}
+
+    Raises:
+        400: scan_id is not a valid UUID.
+        404: Scan record not found.
+    """
+    from agents.orchestrator import SentinelOrchestrator
+
+    # Validate scan_id format
+    try:
+        scan_uuid = uuid.UUID(scan_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Invalid scan_id format — must be a valid UUID.",
+        ) from exc
+
+    # Load scan record to get client_id
+    result = await db.execute(select(Scan).where(Scan.id == scan_uuid))
+    scan: Optional[Scan] = result.scalar_one_or_none()
+    if scan is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Scan {scan_id} not found.",
+        )
+
+    client_id = str(scan.client_id)
+
+    # Instantiate orchestrator inside the function so the WebSocket manager
+    # singleton (imported at module level in orchestrator.py) is the same
+    # instance already serving connected browser clients.
+    orchestrator = SentinelOrchestrator()
+
+
+    # Fire and forget — API returns immediately, scan runs in background.
+    # asyncio.create_task keeps it in the same event loop, so WebSocket
+    # broadcasts reach connected clients without any cross-process relay.
+    asyncio.create_task(
+        orchestrator.run_scan(client_id=client_id, scan_id=scan_id)
+    )
+
+    logger.info("Scan %s triggered via /run endpoint for client %s", scan_id, client_id)
+
+    return {"status": "started", "scan_id": scan_id}
+

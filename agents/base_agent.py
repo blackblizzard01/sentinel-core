@@ -1,11 +1,12 @@
 """Base agent class providing shared LLM clients for Sentinel AI agents."""
 
+import asyncio
 import logging
 import os
 from typing import Optional
 
 from dotenv import load_dotenv
-from groq import AsyncGroq
+from groq import AsyncGroq, RateLimitError as GroqRateLimitError
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
@@ -83,23 +84,37 @@ class BaseAgent:
         temperature: float = 0.7,
     ) -> str:
         """
-        Call Groq LLM with the given prompt and system message.
+        Call Groq LLM with exponential backoff on rate limits (max 3 attempts).
         Returns the response text string.
         """
-        try:
-            response = await self.groq.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=temperature,
-            )
-            content: Optional[str] = response.choices[0].message.content
-            return content or ""
-        except Exception as exc:
-            self.logger.error("[%s] Groq call failed: %s", self.agent_name, exc)
-            raise
+        last_exc: Exception = RuntimeError("call_groq: no attempts made")
+        for attempt in range(3):
+            try:
+                response = await self.groq.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=temperature,
+                )
+                content: Optional[str] = response.choices[0].message.content
+                return content or ""
+            except GroqRateLimitError as exc:
+                last_exc = exc
+                wait: float = 2 ** attempt  # 1s, 2s, 4s
+                self.logger.warning(
+                    "[%s] Groq rate limit (attempt %d/3) — retrying in %.0fs",
+                    self.agent_name,
+                    attempt + 1,
+                    wait,
+                )
+                await asyncio.sleep(wait)
+            except Exception as exc:
+                self.logger.error("[%s] Groq call failed: %s", self.agent_name, exc)
+                raise
+        self.logger.error("[%s] Groq rate limit exhausted after 3 attempts", self.agent_name)
+        raise last_exc
 
     def log_action(self, action: str, detail: str) -> None:
         """Log an agent action at INFO level with agent name prefix."""
@@ -196,3 +211,43 @@ class BaseAgent:
         )
         self.log_action("call_deepseek", f"model={model}")
         return response.choices[0].message.content
+
+    async def call_claude(
+        self,
+        prompt: str,
+        system: str = "",
+        model: str = "claude-sonnet-4-20250514",
+        max_tokens: int = 4096,
+    ) -> str:
+        """
+        Call Anthropic Claude API.
+        Primary LLM for ReportAgent (Week 5) and investor demo.
+        Raises RuntimeError if ANTHROPIC_API_KEY is absent so callers can
+        catch it and fall back to call_gemini() during development.
+
+        Args:
+            prompt: User message content.
+            system: System instruction string.
+            model: Claude model name. Default: claude-sonnet-4-20250514.
+            max_tokens: Maximum output tokens.
+
+        Returns:
+            Response text string.
+
+        Raises:
+            RuntimeError: If ANTHROPIC_API_KEY is not set.
+        """
+        if not self.anthropic:
+            raise RuntimeError(
+                "ANTHROPIC_API_KEY is not set. "
+                "Use call_gemini() instead during development. "
+                "This key is reserved for the investor demo only."
+            )
+        response = await self.anthropic.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            system=system if system else None,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        self.log_action("call_claude", f"model={model}")
+        return response.content[0].text

@@ -257,6 +257,7 @@ async def test_log_vulnerability_returns_id(mock_kb: KnowledgeBase) -> None:
 
 async def test_get_top_attacks_returns_list(mock_kb: KnowledgeBase) -> None:
     """get_top_attacks() returns a list (empty if no results)."""
+    mock_kb.successful_attacks.count = MagicMock(return_value=10)  # non-zero so guard passes
     mock_kb.successful_attacks.query = MagicMock(
         return_value={"metadatas": [[]], "documents": [[]], "distances": [[]]},
     )
@@ -270,6 +271,7 @@ async def test_get_top_attacks_returns_list(mock_kb: KnowledgeBase) -> None:
 
 async def test_chromadb_query_includes_client_id(mock_kb: KnowledgeBase) -> None:
     """Every ChromaDB query must include client_id in the where clause."""
+    mock_kb.successful_attacks.count = MagicMock(return_value=10)  # non-zero so guard passes
     mock_kb.successful_attacks.query = MagicMock(
         return_value={"metadatas": [[]], "documents": [[]], "distances": [[]]},
     )
@@ -280,7 +282,12 @@ async def test_chromadb_query_includes_client_id(mock_kb: KnowledgeBase) -> None
     )
     call_kwargs: dict = mock_kb.successful_attacks.query.call_args.kwargs
     assert "where" in call_kwargs
-    assert call_kwargs["where"]["client_id"] == "client-001"
+    # With component_type set, where is now {"$and": [{"client_id": ...}, {"component_type": ...}]}
+    where = call_kwargs["where"]
+    conditions: list = where.get("$and", [])
+    client_id_condition = next((c for c in conditions if "client_id" in c), None)
+    assert client_id_condition is not None
+    assert client_id_condition["client_id"] == "client-001"
 
 
 # ─── SECTION 4 — ConnectionManager Tests ────────────────────────────────────
