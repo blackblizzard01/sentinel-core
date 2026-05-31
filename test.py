@@ -1,18 +1,4 @@
-import asyncio
+from agents.orchestrator import recon_node, attack_node, route_after_attack, run_scan, _broadcast
 from agents.recon_agent import ReconAgent
-
-async def test():
-    agent = ReconAgent(client_id='test-client', scan_id='test-scan-001')
-    manifest = {
-        'components': [
-            {'endpoint': 'http://localhost:8080/chat', 'framework': 'fastapi'}
-        ]
-    }
-    result = await agent.build_component_map(manifest)
-    print('Component map:', result)
-    assert len(result) == 1
-    assert 'component_id' in result[0]
-    assert 'estimated_attack_domains' in result[0]
-    print('PASS')
-
-asyncio.run(test())
+from agents.attack_agent import AttackAgent
+print('All imports OK')

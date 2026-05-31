@@ -14,20 +14,24 @@ class ConcreteAgent(BaseAgent):
 
 def _patch_llm_clients() -> tuple:
     """Patch all LLM client constructors used in BaseAgent.__init__."""
+    mock_gemini_client = MagicMock()
+    mock_gemini_response = MagicMock()
+    mock_gemini_response.text = "mocked gemini response"
+    mock_gemini_client.models.generate_content.return_value = mock_gemini_response
+
     return (
         patch("agents.base_agent.ApiKeyManager.acquire_key", return_value="test-api-key"),
         patch("agents.base_agent.AsyncGroq"),
         patch("agents.base_agent.AsyncOpenAI"),
-        patch("agents.base_agent.genai.configure"),
-        patch("agents.base_agent.genai.GenerativeModel"),
+        patch("agents.base_agent.genai.Client", return_value=mock_gemini_client),
     )
 
 
 @pytest.mark.asyncio
 async def test_call_groq_returns_non_empty_string() -> None:
     """Verify call_groq returns a non-empty string given a simple prompt."""
-    key_patch, groq_patch, openai_patch, configure_patch, model_patch = _patch_llm_clients()
-    with key_patch, groq_patch as mock_groq_cls, openai_patch, configure_patch, model_patch:
+    key_patch, groq_patch, openai_patch, gemini_patch = _patch_llm_clients()
+    with key_patch, groq_patch as mock_groq_cls, openai_patch, gemini_patch:
         mock_groq_instance = MagicMock()
         mock_groq_cls.return_value = mock_groq_instance
         mock_groq_instance.chat.completions.create = AsyncMock(
@@ -49,8 +53,8 @@ async def test_call_groq_returns_non_empty_string() -> None:
 
 def test_log_action_calls_logger_info() -> None:
     """Verify log_action emits a structured INFO log entry."""
-    key_patch, groq_patch, openai_patch, configure_patch, model_patch = _patch_llm_clients()
-    with key_patch, groq_patch, openai_patch, configure_patch, model_patch:
+    key_patch, groq_patch, openai_patch, gemini_patch = _patch_llm_clients()
+    with key_patch, groq_patch, openai_patch, gemini_patch:
         agent = ConcreteAgent(
             agent_name=AgentName.RECON,
             client_id="test-client",
@@ -66,8 +70,8 @@ def test_log_action_calls_logger_info() -> None:
 
 def test_log_error_calls_logger_error() -> None:
     """Verify log_error emits a structured ERROR log entry with exception info."""
-    key_patch, groq_patch, openai_patch, configure_patch, model_patch = _patch_llm_clients()
-    with key_patch, groq_patch, openai_patch, configure_patch, model_patch:
+    key_patch, groq_patch, openai_patch, gemini_patch = _patch_llm_clients()
+    with key_patch, groq_patch, openai_patch, gemini_patch:
         agent = ConcreteAgent(
             agent_name=AgentName.RECON,
             client_id="test-client",

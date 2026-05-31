@@ -10,12 +10,15 @@ from constants import AttackDomain, ComponentType
 def recon_agent() -> ReconAgent:
     """Create a ReconAgent with LLM clients and KnowledgeBase mocked."""
     kb = MagicMock()
+    mock_gemini_client = MagicMock()
+    mock_gemini_response = MagicMock()
+    mock_gemini_response.text = "mocked gemini response"
+    mock_gemini_client.models.generate_content.return_value = mock_gemini_response
     with (
         patch("agents.base_agent.ApiKeyManager.acquire_key", return_value="test-api-key"),
         patch("agents.base_agent.AsyncGroq"),
         patch("agents.base_agent.AsyncOpenAI"),
-        patch("agents.base_agent.genai.configure"),
-        patch("agents.base_agent.genai.GenerativeModel"),
+        patch("agents.base_agent.genai.Client", return_value=mock_gemini_client),
     ):
         yield ReconAgent(
             client_id="test-client",
@@ -218,7 +221,7 @@ async def test_run_updates_state_and_writes_chroma(recon_agent: ReconAgent) -> N
     agent.build_component_map = AsyncMock(return_value=[mock_component])  # type: ignore[method-assign]
 
     mock_collection = MagicMock()
-    agent.knowledge_base.chroma_client.get_or_create_collection.return_value = (
+    agent.knowledge_base.chroma_client.get_collection.return_value = (
         mock_collection
     )
 

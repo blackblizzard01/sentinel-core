@@ -9,7 +9,8 @@ from typing import Optional
 
 import groq
 from groq import AsyncGroq
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from openai import AsyncOpenAI
 from tenacity import (
     retry,
@@ -55,8 +56,7 @@ class BaseAgent(ABC):
             api_key=deepseek_key,
             base_url="https://api.deepseek.com",
         )
-        genai.configure(api_key=gemini_key)
-        self.gemini = genai.GenerativeModel(LLMModel.GEMINI)
+        self.gemini = genai.Client(api_key=gemini_key)
 
         self.logger.info(
             "LLM clients ready — groq_keys=%s gemini_keys=%s deepseek_keys=%s",
@@ -71,8 +71,7 @@ class BaseAgent(ABC):
 
     def _rotate_gemini_client(self) -> None:
         """Reconfigure Gemini with the next API key after rate limiting."""
-        genai.configure(api_key=ApiKeyManager.rotate("gemini"))
-        self.gemini = genai.GenerativeModel(LLMModel.GEMINI)
+        self.gemini = genai.Client(api_key=ApiKeyManager.rotate("gemini"))
 
     def _rotate_deepseek_client(self) -> None:
         """Rebuild the DeepSeek client with the next API key after rate limiting."""
@@ -152,14 +151,15 @@ class BaseAgent(ABC):
             reraise=True,
         )
         async def _call() -> str:
-            full_prompt = f"{system}\n\n{prompt}"
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self.gemini.generate_content(
-                    full_prompt,
-                    generation_config=genai.types.GenerationConfig(
-                        max_output_tokens=max_tokens
+                lambda: self.gemini.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system,
+                        max_output_tokens=max_tokens,
                     ),
                 ),
             )
