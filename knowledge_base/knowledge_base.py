@@ -30,6 +30,11 @@ class KnowledgeBase:
             "KnowledgeBase initialized — client=%s scan=%s", client_id, scan_id
         )
 
+    @property
+    def chroma_client(self):
+        """Expose the ChromaDB singleton for collection access."""
+        return self._chroma
+
     def _client_filter(self) -> dict[str, str]:
         """Return the mandatory client_id filter for ChromaDB query/get operations."""
         return {"client_id": self.client_id}
@@ -37,102 +42,117 @@ class KnowledgeBase:
     async def log_attack(
         self,
         component_id: str,
+        component_type: str,
         domain: str,
         payload: str,
         response: str,
         score: float,
-        timestamp: Optional[str] = None,
-    ) -> str:
+        timestamp: str,
+    ) -> None:
         """Logs a single attack attempt to attack_history.
 
         If score >= SUCCESS_THRESHOLD, also logs to successful_attacks.
         Returns the generated attack_id.
         """
-        attack_id = str(uuid.uuid4())
-        timestamp = timestamp or datetime.now(timezone.utc).isoformat()
-        metadata: dict[str, Any] = {
-            "client_id": self.client_id,
-            "scan_id": self.scan_id,
-            "component_id": component_id,
-            "domain": domain,
-            "response": response[:500],
-            "score": score,
-            "timestamp": timestamp,
-        }
-        attack_history = self._chroma.get_collection(ChromaCollection.ATTACK_HISTORY)
         try:
-            attack_history.add(
-                documents=[payload],
-                metadatas=[metadata],
-                ids=[attack_id],
-            )
-        except chromadb.errors.ChromaError as exc:
-            logger.error("Failed to log attack to attack_history: %s", exc)
-            raise
-        logger.debug("Attack logged: %s score=%s", attack_id, score)
+            doc_text = payload[:500]
+            response_preview = response[:300]
+            doc_id = f"{self.scan_id}_{component_id}_{domain}_{timestamp}"
+            doc_id = doc_id.replace(" ", "_")
 
-        if score >= SUCCESS_THRESHOLD:
-            successful_attacks = self._chroma.get_collection(
-                ChromaCollection.SUCCESSFUL_ATTACKS
+            metadata: dict[str, Any] = {
+                "client_id": self.client_id,
+                "scan_id": self.scan_id,
+                "component_id": component_id,
+                "component_type": component_type,
+                "domain": domain,
+                "score": score,
+                "timestamp": timestamp,
+                "response_preview": response_preview,
+            }
+
+            attack_history = self._chroma.get_collection(ChromaCollection.ATTACK_HISTORY)
+            attack_history.add(
+                documents=[doc_text],
+                metadatas=[metadata],
+                ids=[doc_id],
             )
-            try:
-                successful_attacks.add(
-                    documents=[payload],
-                    metadatas=[metadata],
-                    ids=[attack_id],
-                )
-            except chromadb.errors.ChromaError as exc:
-                logger.error("Failed to log successful attack: %s", exc)
-                raise
             logger.info(
-                "Successful attack logged: %s domain=%s score=%s",
-                attack_id,
-                domain,
-                score,
+                "Logged attack: id=%s score=%.2f domain=%s", doc_id, score, domain
             )
-        return attack_id
+
+            if score >= SUCCESS_THRESHOLD:
+                successful_attacks = self._chroma.get_collection(
+                    ChromaCollection.SUCCESSFUL_ATTACKS
+                )
+                successful_attacks.add(
+                    documents=[doc_text],
+                    metadatas=[metadata],
+                    ids=[doc_id],
+                )
+                logger.info(
+                    "Logged successful attack: id=%s score=%.2f", doc_id, score
+                )
+        except Exception as e:
+            logger.error("log_attack failed: %s", e)
+            raise
 
     async def get_top_attacks(
         self,
+        client_id: str,
         domain: str,
         component_type: str,
-        k: int = TOP_K_RETRIEVAL,
+        k: int = 5,
     ) -> list[dict[str, Any]]:
         """Retrieves top-k semantically similar successful attacks for this client.
 
         Returns an empty list if no results exist.
         """
-        collection = self._chroma.get_collection(ChromaCollection.SUCCESSFUL_ATTACKS)
         try:
+            collection = self._chroma.get_collection(ChromaCollection.ATTACK_HISTORY)
+            query_text = f"{domain} {component_type}"
             results = collection.query(
-                query_texts=[f"{domain} {component_type}"],
+                query_texts=[query_text],
                 n_results=k,
-                where=self._client_filter(),
+                where={
+                    "$and": [
+                        {"client_id": client_id},
+                        {"domain": domain},
+                        {"component_type": component_type},
+                    ]
+                },
+                include=["metadatas", "documents", "distances"],
             )
-        except chromadb.errors.ChromaError as exc:
-            logger.error("Failed to query successful_attacks: %s", exc)
-            raise
 
-        if not results or not results.get("ids") or not results["ids"][0]:
+            if not results or not results.get("metadatas") or not results["metadatas"][0]:
+                return []
+
+            metadatas_list = results["metadatas"][0]
+            documents_list = results["documents"][0]
+            distances_list = results["distances"][0]
+
+            mapped: list[dict[str, Any]] = []
+            for i, meta in enumerate(metadatas_list):
+                mapped.append(
+                    {
+                        "payload": documents_list[i],
+                        "score": meta.get("score", 0.0),
+                        "domain": meta.get("domain", ""),
+                        "component_id": meta.get("component_id", ""),
+                        "timestamp": meta.get("timestamp", ""),
+                        "response_preview": meta.get("response_preview", ""),
+                        "distance": distances_list[i],
+                    }
+                )
+
+            mapped.sort(key=lambda x: x["score"], reverse=True)
+            logger.info(
+                "get_top_attacks returned %s results for domain=%s", len(mapped), domain
+            )
+            return mapped
+        except Exception as e:
+            logger.error("get_top_attacks failed: %s", e)
             return []
-
-        ids = results["ids"][0]
-        documents = results["documents"][0]
-        metadatas = results["metadatas"][0]
-        mapped = [
-            {
-                "id": doc_id,
-                "payload": document,
-                "score": meta["score"],
-                "domain": meta["domain"],
-                "component_id": meta["component_id"],
-            }
-            for doc_id, document, meta in zip(ids, documents, metadatas)
-        ]
-        logger.debug(
-            "get_top_attacks returned %s results for domain=%s", len(mapped), domain
-        )
-        return mapped
 
     async def log_mutation(
         self,
