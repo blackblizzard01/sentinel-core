@@ -1,15 +1,16 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 import httpx
 from pydantic import BaseModel
 
 from agents.base_agent import BaseAgent
-from agents.orchestrator import ScanState
 from constants import (
     AgentName,
     AttackDomain,
@@ -19,14 +20,20 @@ from constants import (
 )
 from knowledge_base.knowledge_base import KnowledgeBase
 
+if TYPE_CHECKING:
+    from agents.orchestrator import ScanState
+
 logger = logging.getLogger(__name__)
 
 FINGERPRINT_HTTP_TIMEOUT: float = 10.0
 FINGERPRINT_CALIBRATION_PROMPT: str = (
     "What is 2+2? Answer in exactly one word."
 )
-FINGERPRINT_PAYLOAD: dict[str, Any] = {
+FINGERPRINT_PAYLOAD_MESSAGES: dict[str, Any] = {
     "messages": [{"role": "user", "content": FINGERPRINT_CALIBRATION_PROMPT}],
+}
+FINGERPRINT_PAYLOAD_COMPLETION: dict[str, Any] = {
+    "prompt": FINGERPRINT_CALIBRATION_PROMPT,
     "max_tokens": 10,
 }
 COMPONENT_TYPE_EMBEDDING: str = "embedding_model"
@@ -82,11 +89,16 @@ class ReconAgent(BaseAgent):
     component_profiles collection. Inherits BaseAgent for LLM calls and
     structured logging."""
 
-    def __init__(self, client_id: str, scan_id: str, kb: KnowledgeBase) -> None:
-        """Initialise ReconAgent with shared KnowledgeBase instance."""
+    def __init__(
+        self,
+        client_id: str,
+        scan_id: str,
+        kb: Optional[KnowledgeBase] = None,
+    ) -> None:
+        """Initialise ReconAgent with optional shared KnowledgeBase instance."""
         super().__init__(AgentName.RECON, client_id, scan_id)
-        self.kb = kb
-        self.knowledge_base = kb
+        self.knowledge_base = kb or KnowledgeBase(client_id=client_id, scan_id=scan_id)
+        self.kb = self.knowledge_base
         self.http_client: Optional[httpx.AsyncClient] = None
 
     def _estimated_attack_domains(self, component_type: str) -> list[str]:
@@ -123,21 +135,29 @@ class ReconAgent(BaseAgent):
         priority_score = self.assign_priority(probe_result, framework, [])
         return is_reachable, framework, priority_score
 
-    def _classify_fingerprint_body(self, body: dict[str, Any]) -> str:
+    def _classify_fingerprint_body(self, body: Any) -> str:
         """Classify component type from a fingerprint HTTP response body."""
-        if self._body_has_embedding_keys(body):
+        if isinstance(body, list) and body and all(
+            isinstance(item, (int, float)) for item in body
+        ):
             logger.warning(
                 "Fingerprint detected embedding_model at endpoint — not in attack scope"
             )
             return COMPONENT_TYPE_EMBEDDING
 
-        for key in ("label", "category", "classification"):
-            if key in body:
-                return ComponentType.LLM_MODEL
+        if isinstance(body, dict):
+            if self._body_has_embedding_keys(body):
+                logger.warning(
+                    "Fingerprint detected embedding_model at endpoint — not in attack scope"
+                )
+                return COMPONENT_TYPE_EMBEDDING
 
-        text_value = self._extract_text_from_body(body)
-        if text_value and len(text_value.strip()) <= 20:
-            return ComponentType.LLM_MODEL
+            if "label" in body or "labels" in body:
+                return "classifier"
+
+            text_value = self._extract_text_from_body(body)
+            if text_value.strip():
+                return ComponentType.LLM_MODEL
 
         return ComponentType.LLM_MODEL
 
@@ -175,34 +195,60 @@ class ReconAgent(BaseAgent):
         return ""
 
     async def fingerprint_model(self, endpoint: str) -> str:
-        """Sends a calibration prompt to an LLM endpoint and classifies the model type."""
-        result = ComponentType.LLM_MODEL
-        try:
-            async with httpx.AsyncClient(timeout=FINGERPRINT_HTTP_TIMEOUT) as client:
-                response = await client.post(
-                    endpoint,
-                    json=FINGERPRINT_PAYLOAD,
-                    headers={"User-Agent": PROBE_USER_AGENT},
-                )
-                response.raise_for_status()
-                body = response.json()
-                if isinstance(body, dict):
-                    result = self._classify_fingerprint_body(body)
-        except httpx.TimeoutException as exc:
-            self.log_error(
-                f"fingerprint_model timeout for {endpoint}",
-                exc,
-            )
-        except httpx.HTTPStatusError as exc:
-            self.log_error(
-                f"fingerprint_model HTTP {exc.response.status_code} for {endpoint}",
-                exc,
-            )
-        except Exception as exc:
-            self.log_error("fingerprint_model failed", exc)
+        """
+        Sends a calibration prompt to a detected LLM endpoint and classifies
+        the response style as a ComponentType constant.
 
-        logger.info("Fingerprinted %s as %s", endpoint, result)
-        return result
+        Sends exactly: "What is 2+2? Answer in exactly one word."
+
+        Classification logic:
+        - If response is a short single token / numeric → ComponentType.LLM_MODEL
+        - If response is a probability distribution or label → "classifier"
+        - If response is a vector / list of floats → "embedding_model"
+        - If endpoint does not respond or errors → ComponentType.LLM_MODEL as safe default
+
+        Args:
+            endpoint: The full URL of the LLM endpoint to fingerprint.
+
+        Returns:
+            A ComponentType constant string: ComponentType.LLM_MODEL, "classifier",
+            or "embedding_model".
+        """
+        payloads = (FINGERPRINT_PAYLOAD_MESSAGES, FINGERPRINT_PAYLOAD_COMPLETION)
+        request_headers = {"User-Agent": PROBE_USER_AGENT}
+
+        async with httpx.AsyncClient(timeout=FINGERPRINT_HTTP_TIMEOUT) as client:
+            for payload in payloads:
+                try:
+                    response = await client.post(
+                        endpoint,
+                        json=payload,
+                        headers=request_headers,
+                    )
+                    response.raise_for_status()
+                    body = response.json()
+                    result = self._classify_fingerprint_body(body)
+                    logger.info("Fingerprinted %s as %s", endpoint, result)
+                    return result
+                except httpx.TimeoutException as exc:
+                    self.log_error(
+                        f"fingerprint_model timeout for {endpoint}",
+                        exc,
+                    )
+                except httpx.HTTPStatusError as exc:
+                    self.log_error(
+                        f"fingerprint_model HTTP {exc.response.status_code} for {endpoint}",
+                        exc,
+                    )
+                except Exception as exc:
+                    self.log_error("fingerprint_model failed", exc)
+
+        logger.info(
+            "Fingerprinted %s as %s (default)",
+            endpoint,
+            ComponentType.LLM_MODEL,
+        )
+        return ComponentType.LLM_MODEL
 
     async def build_component_map(self, manifest: dict) -> list[dict]:
         """Assembles the full component map from a client infrastructure manifest."""
@@ -433,7 +479,7 @@ class ReconAgent(BaseAgent):
         manifest = state["manifest"]
         component_map = await self.build_component_map(manifest)
 
-        collection = self.knowledge_base.chroma_client.get_or_create_collection(
+        collection = self.knowledge_base.chroma_client.get_collection(
             ChromaCollection.COMPONENT_PROFILES
         )
         for component in component_map:
