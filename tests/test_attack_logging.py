@@ -43,6 +43,7 @@ async def test_log_attack_and_retrieve(kb: KnowledgeBase) -> None:
 
     await kb.log_attack(
         component_id="comp-001",
+        component_type="llm_model",
         domain=domain,
         payload=payload,
         response=response,
@@ -81,6 +82,7 @@ async def test_client_isolation(kb: KnowledgeBase) -> None:
 
     await kb.log_attack(
         component_id="comp-001",
+        component_type="llm_model",
         domain=domain,
         payload=payload,
         response=response,
@@ -114,6 +116,7 @@ async def test_successful_attack_threshold(kb: KnowledgeBase) -> None:
 
     await kb.log_attack(
         component_id="comp-threshold",
+        component_type="llm_model",
         domain=domain,
         payload=payload_at_threshold,
         response=response,
@@ -123,6 +126,7 @@ async def test_successful_attack_threshold(kb: KnowledgeBase) -> None:
 
     await kb.log_attack(
         component_id="comp-below",
+        component_type="llm_model",
         domain=domain,
         payload=payload_below_threshold,
         response=response,
