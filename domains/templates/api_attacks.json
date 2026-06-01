@@ -1,0 +1,10 @@
+[
+  {
+    "id": "api_placeholder_001",
+    "name": "api_placeholder",
+    "template": "API bypass: add ?admin=true&debug=1 to {target}",
+    "expected_indicators": ["admin", "debug", "bypass"],
+    "severity_potential": "medium",
+    "domain": "api_attacks"
+  }
+]

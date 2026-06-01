@@ -133,11 +133,8 @@ class AttackAgent(BaseAgent):
         self._last_attack_time = time.monotonic()
 
         if component_type == ComponentType.LLM_MODEL:
-            body: dict[str, Any] = {
-                "messages": [{"role": "user", "content": payload}]
-            }
-        else:
-            body = {"input": payload, "query": payload, "prompt": payload}
+            body: dict[str, Any] = {"message": payload}
+
 
         status_code = 0
         response_time_ms = 0.0
@@ -257,6 +254,7 @@ class AttackAgent(BaseAgent):
         return filled
 
     async def run(self, state: ScanState) -> ScanState:
+        print(f"DEBUG: current_domain = {state.get('current_domain')}")
         """
         Main agent entry point. Iterates through all templates for the current
         attack domain and component, executes each, scores each, logs all

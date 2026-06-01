@@ -56,6 +56,10 @@ class ChromaClientSingleton:
             )
         return self._collections[name]
 
+    def get_or_create_collection(self, name: str) -> chromadb.Collection:
+        """Return an existing collection (initialized at client startup)."""
+        return self.get_collection(name)
+
     def reset_client_data(self, client_id: str) -> None:
         """Deletes all documents belonging to client_id across all five collections."""
         logger.warning(f"Resetting all ChromaDB data for client: {client_id}")

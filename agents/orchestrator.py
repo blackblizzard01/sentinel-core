@@ -171,6 +171,11 @@ async def attack_node(state: ScanState) -> dict:
     iteration = state.get("iteration", 0) + 1
     updated_state["iteration"] = iteration
 
+    # <-- CHANGE: Use updated_state (not state) to accumulate all attack results
+    if "all_attack_results" not in updated_state:
+        updated_state["all_attack_results"] = []
+    updated_state["all_attack_results"].extend(attack_results)
+
     if iteration >= MAX_ITERATIONS and not updated_state.get("critical_halt"):
         components = updated_state.get("components", state.get("components", []))
         c_idx = updated_state.get("current_component_index", state.get("current_component_index", 0))
@@ -183,7 +188,9 @@ async def attack_node(state: ScanState) -> dict:
                 updated_state["current_domain_index"] = d_idx + 1
                 updated_state["current_domain"] = domains[d_idx + 1]
                 updated_state["iteration"] = 0
+                # <-- CHANGE: Keep attack_results for current domain, but don't lose the accumulation
                 updated_state["attack_results"] = []
+                # (Accumulation already done above, so no need to do it again here)
             else:
                 next_c = c_idx + 1
                 updated_state["current_component_index"] = next_c
@@ -293,7 +300,11 @@ def build_graph() -> StateGraph:
     graph.add_conditional_edges(
         "attack_node",
         route_after_attack,
-        {"mutation_node": "mutation_node", "report_node": "report_node"},
+        {
+            "attack_node": "attack_node",
+            "mutation_node": "mutation_node",
+            "report_node": "report_node"
+        }
     )
     graph.add_edge("mutation_node", "attack_node")
     graph.add_edge("report_node", "autopatch_node")
@@ -301,8 +312,19 @@ def build_graph() -> StateGraph:
     return graph.compile()
 
 
-async def run_scan(client_id: str, scan_id: str) -> ScanState:
-    """Run the full scan orchestration graph and return the final state."""
+async def run_scan(client_id: str, scan_id: str, manifest: dict | None = None) -> ScanState:
+    """Run the full scan orchestration graph and return the final state.
+    
+    Args:
+        client_id: The authorized client's ID.
+        scan_id: The current scan session ID.
+        manifest: Optional infrastructure manifest with component endpoints.
+                 If not provided, defaults to empty manifest (scan will have nothing to test).
+                 Format: {"components": [{"endpoint": str, "type": str, "framework": str}]}
+    
+    Returns:
+        Final ScanState after orchestration completes.
+    """
     app = build_graph()
     initial_state: ScanState = {
         "client_id": client_id,
@@ -317,7 +339,7 @@ async def run_scan(client_id: str, scan_id: str) -> ScanState:
         "logs": [],
         "critical_halt": False,
         "components": [],
-        "manifest": {"components": []},
+        "manifest": manifest if manifest is not None else {"components": []},
         "approved_findings": [],
         "report_path": "",
         "report_json": {},

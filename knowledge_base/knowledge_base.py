@@ -33,6 +33,7 @@ class KnowledgeBase:
     @property
     def chroma_client(self):
         """Expose the ChromaDB singleton for collection access."""
+        """Expose the shared ChromaDB singleton for collection access."""
         return self._chroma
 
     def _client_filter(self) -> dict[str, str]:
