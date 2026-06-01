@@ -134,7 +134,11 @@ class AttackAgent(BaseAgent):
 
         if component_type == ComponentType.LLM_MODEL:
             body: dict[str, Any] = {"message": payload}
+        else:
+            # Fallback for other component types (API, RAG, etc.)
+            body = {"input": payload, "query": payload, "prompt": payload}
 
+        print(f"DEBUG execute_attack: component_type={component_type}, body={body}")
 
         status_code = 0
         response_time_ms = 0.0
