@@ -108,26 +108,13 @@ class ReconAgent(BaseAgent):
         return [d for d in candidate_domains if (templates_dir / f"{d}.json").exists()]
 
     def _estimated_attack_domains(self, component_type: str) -> list[str]:
-        """Map component type to attack domains, but only those with existing template files."""
-        domain_map: dict[str, list[str]] = {
-            ComponentType.LLM_MODEL: [
-                AttackDomain.PROMPT_INJECTION,
-                AttackDomain.SYSTEM_PROMPT_EXTRACT,
-            ],
-            ComponentType.RAG: [
-                AttackDomain.RAG_POISONING,
-                AttackDomain.INDIRECT_INJECTION,
-            ],
-            ComponentType.API: [AttackDomain.API_ATTACKS],
-            ComponentType.BACKEND: [
-                AttackDomain.API_ATTACKS,
-                AttackDomain.INDIRECT_INJECTION,
-            ],
-            ComponentType.FRONTEND: [AttackDomain.INDIRECT_INJECTION],
-            ComponentType.DATABASE: [AttackDomain.API_ATTACKS],
-        }
-        candidates = domain_map.get(component_type, [AttackDomain.PROMPT_INJECTION])
-        return self._available_domains(candidates)  
+        """Map component type to attack domains using DOMAIN_COMPONENT_MAP
+        from constants.py, filtered to only domains with existing template files."""
+        from constants import DOMAIN_COMPONENT_MAP
+        candidates = DOMAIN_COMPONENT_MAP.get(
+            component_type, [AttackDomain.PROMPT_INJECTION]
+        )
+        return self._available_domains(candidates)
 
     async def _summarize_probe(
         self, endpoint: str

@@ -9,10 +9,21 @@ from constants import (
     ChromaCollection,
     SUCCESS_THRESHOLD,
     TOP_K_RETRIEVAL,
+    Severity,
 )
 from knowledge_base.chroma_client import get_chroma_client
 
 logger = logging.getLogger(__name__)
+
+CROSS_COMPONENT_HINT_MAP = {
+    ("system_prompt_extraction", "api_layer"): "System prompt leaked on LLM — probe API endpoints for hardcoded system prompt values in response headers or error bodies.",
+    ("system_prompt_extraction", "rag_pipeline"): "System prompt leaked on LLM — test RAG retrieval for documents that reconstruct or mirror the system prompt.",
+    ("prompt_injection", "rag_pipeline"): "Prompt injection succeeded on LLM — attempt indirect injection via RAG-retrieved documents to chain the exploit.",
+    ("prompt_injection", "api_layer"): "Prompt injection succeeded on LLM — probe API input fields for unsanitized pass-through to downstream LLM calls.",
+    ("rag_poisoning", "llm_model"): "RAG corpus poisoned — test if poisoned documents alter LLM responses in downstream inference calls.",
+    ("indirect_injection", "api_layer"): "Indirect injection found in document layer — probe API endpoints that accept user-supplied document URLs or content.",
+    ("api_attacks", "llm_model"): "API auth bypass found — test if the same endpoint passes unauthenticated prompts directly to the LLM.",
+}
 
 
 class KnowledgeBase:
@@ -454,3 +465,77 @@ class KnowledgeBase:
             self.client_id,
         )
         return mapped
+
+    async def get_cross_component_insights(
+        self,
+        completed_component_id: str,
+        next_component_type: str,
+    ) -> list[dict]:
+        """
+        Queries the vulnerability_catalog for high-severity findings from a
+        completed component and returns attack strategy hints relevant to the
+        next component type.
+
+        Only findings with severity == Severity.HIGH or Severity.CRITICAL are
+        considered. Returns an empty list on any ChromaDB error or if no
+        qualifying findings exist.
+
+        Args:
+            completed_component_id: The component_id of the just-finished component.
+            next_component_type: A ComponentType constant string for the upcoming
+                component. Used to select relevant cross-component hint text.
+
+        Returns:
+            List of hint dicts, each with keys:
+                "hint": str          — the strategy suggestion sentence
+                "source_domain": str — the domain where the original vuln was found
+                "source_score": float — the score of the original finding
+                "severity": str      — Severity constant of the original finding
+        """
+        try:
+            collection = self._chroma.get_collection(ChromaCollection.VULNERABILITY_CATALOG)
+            results = collection.get(
+                where={
+                    "$and": [
+                        {"client_id": {"$eq": self.client_id}},
+                        {"component_id": {"$eq": completed_component_id}},
+                    ]
+                },
+                include=["metadatas", "documents"]
+            )
+        except chromadb.errors.ChromaError as exc:
+            logger.error("get_cross_component_insights failed: %s", exc)
+            return []
+
+        metadatas = results.get("metadatas") or []
+        if not metadatas:
+            return []
+
+        hints = []
+        for meta in metadatas:
+            severity = meta.get("severity")
+            if severity in (Severity.HIGH, Severity.CRITICAL):
+                source_domain = meta.get("domain", "")
+                score = float(meta.get("score", 0.0))
+                
+                key = (source_domain, next_component_type)
+                if key in CROSS_COMPONENT_HINT_MAP:
+                    hint = CROSS_COMPONENT_HINT_MAP[key]
+                else:
+                    hint = (
+                        f"Prior finding on {completed_component_id} ({source_domain}, score "
+                        f"{score:.2f}) — probe {next_component_type} for related weaknesses."
+                    )
+                
+                hints.append({
+                    "hint": hint,
+                    "source_domain": source_domain,
+                    "source_score": score,
+                    "severity": severity,
+                })
+
+        logger.info(
+            "get_cross_component_insights returned %d insights for completed_component_id=%s, next_component_type=%s",
+            len(hints), completed_component_id, next_component_type
+        )
+        return hints
