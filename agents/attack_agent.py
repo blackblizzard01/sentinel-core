@@ -258,7 +258,6 @@ class AttackAgent(BaseAgent):
         return filled
 
     async def run(self, state: ScanState) -> ScanState:
-        print(f"DEBUG: current_domain = {state.get('current_domain')}")
         """
         Main agent entry point. Iterates through all templates for the current
         attack domain and component, executes each, scores each, logs all
@@ -306,10 +305,56 @@ class AttackAgent(BaseAgent):
             return state
         templates = templates[:MAX_ATTACKS_PER_DOMAIN]
 
+        # Fetch cross-component intelligence hints from KB.
+        # Only runs when this is not the first component (index > 0).
+        component_index: int = state.get("current_component_index", 0)
+        if component_index > 0:
+            components: list = state.get("components", [])
+            if component_index > 0 and len(components) >= component_index:
+                completed_component = components[component_index - 1]
+                completed_component_id: str = completed_component.get(
+                    "component_id", ""
+                )
+                try:
+                    hints: list[dict] = await self.knowledge_base.get_cross_component_insights(
+                        completed_component_id=completed_component_id,
+                        next_component_type=component_type,
+                    )
+                except Exception as _hint_exc:
+                    self.logger.warning(
+                        "get_cross_component_insights failed (non-fatal): %s",
+                        _hint_exc,
+                    )
+                    hints = []
+
+                if hints:
+                    hint_templates: list[dict] = [
+                        {
+                            "id": f"HINT-{i:03d}",
+                            "name": f"cross_component_hint_{i}",
+                            "category": "cross_component_intel",
+                            "payload": h["hint"],
+                            "template": h["hint"],
+                            "description": (
+                                f"Cross-component hint from {h['source_domain']} "
+                                f"(score {h['source_score']:.2f})"
+                            ),
+                            "expected_indicators": [],
+                            "severity": h["severity"],
+                        }
+                        for i, h in enumerate(hints)
+                    ]
+                    templates = hint_templates + templates
+                    self.logger.info(
+                        "Prepended %s cross-component hints for component=%s",
+                        len(hint_templates),
+                        component_id,
+                    )
+
         attack_results: list[dict[str, Any]] = []
         for template in templates:
             filled_payload = self._fill_template(
-                template["template"],
+                template.get("payload", template.get("template", "")),
                 endpoint,
                 component_type,
                 current_domain,
