@@ -7,6 +7,7 @@ PURPOSE:
 
 WHAT IS BEING TESTED:
     - test_log_attack_and_retrieve: Verifies that a logged attack is retrievable via get_top_attacks with matching domain, score, and payload content.
+    - test_client_isolation: Verifies that attacks logged under one client_id are not returned when querying under a different client_id.
     - test_successful_attack_threshold: Verifies that attacks scoring >= SUCCESS_THRESHOLD are logged to both attack_history and successful_attacks collections.
 
 DEPENDENCIES (what must be running/available):
