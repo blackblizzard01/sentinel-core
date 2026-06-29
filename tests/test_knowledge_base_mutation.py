@@ -1,4 +1,30 @@
-"""Unit tests for KnowledgeBase.log_mutation and get_lineage."""
+"""
+================================================================================
+TEST FILE: test_knowledge_base_mutation.py
+================================================================================
+PURPOSE:
+    Verifies that KnowledgeBase correctly logs and retrieves mutation lineage records.
+
+WHAT IS BEING TESTED:
+    - test_two_generation_lineage: Three-generation lineage returns sorted records with client isolation enforced.
+    - test_get_lineage_empty: Unknown parent_attack_id returns an empty list without raising.
+
+DEPENDENCIES (what must be running/available):
+    - Dummy target:     NO  (uvicorn dummy_target.app:app --port 8001)
+    - Sentinel backend: NO  (uvicorn backend.main:app --port 8000)
+    - Real API keys:    NO  (Groq / Gemini / DeepSeek in .env)
+    - Ollama:           NO  (ollama serve + ollama pull mistral)
+    - ChromaDB:         YES (auto-initialized — no manual step needed)
+
+HOW TO RUN:
+    pytest tests/test_knowledge_base_mutation.py -v
+
+ESTIMATED RUNTIME: fast <5s
+
+NOTES:
+    Backed by an in-memory ChromaDB client with mutation_lineage only.
+================================================================================
+"""
 
 import asyncio
 import uuid

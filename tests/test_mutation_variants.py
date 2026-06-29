@@ -1,8 +1,28 @@
-"""Unit test for MutationAgent.generate_variants.
+"""
+================================================================================
+TEST FILE: test_mutation_variants.py
+================================================================================
+PURPOSE:
+    Verifies that MutationAgent generates distinct variants with sufficient cosine distance from the parent payload.
 
-Verifies that all 10 generated variants have cosine distance > 0.3
-from the parent payload embedding, confirming they are genuinely different.
-Uses unittest.mock to patch call_deepseek so no real API calls are made.
+WHAT IS BEING TESTED:
+    - test_generate_variants_cosine_distance: All 10 variants must have cosine distance > 0.3 from the parent payload.
+
+DEPENDENCIES (what must be running/available):
+    - Dummy target:     NO  (uvicorn dummy_target.app:app --port 8001)
+    - Sentinel backend: NO  (uvicorn backend.main:app --port 8000)
+    - Real API keys:    NO  (Groq / Gemini / DeepSeek in .env)
+    - Ollama:           NO  (ollama serve + ollama pull mistral)
+    - ChromaDB:         NO  (auto-initialized — no manual step needed)
+
+HOW TO RUN:
+    pytest tests/test_mutation_variants.py -v
+
+ESTIMATED RUNTIME: fast <5s
+
+NOTES:
+    Uses unittest.mock to patch call_deepseek so no real API calls are made.
+================================================================================
 """
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock

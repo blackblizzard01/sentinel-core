@@ -1,3 +1,31 @@
+"""
+================================================================================
+TEST FILE: test_base_agent.py
+================================================================================
+PURPOSE:
+    Verifies that BaseAgent correctly initializes LLM clients and emits structured logs.
+
+WHAT IS BEING TESTED:
+    - test_call_groq_returns_non_empty_string: Verify call_groq returns a non-empty string given a simple prompt.
+    - test_log_action_calls_logger_info: Verify log_action emits a structured INFO log entry.
+    - test_log_error_calls_logger_error: Verify log_error emits a structured ERROR log entry with exception info.
+
+DEPENDENCIES (what must be running/available):
+    - Dummy target:     NO  (uvicorn dummy_target.app:app --port 8001)
+    - Sentinel backend: NO  (uvicorn backend.main:app --port 8000)
+    - Real API keys:    NO  (Groq / Gemini / DeepSeek in .env)
+    - Ollama:           NO  (ollama serve + ollama pull mistral)
+    - ChromaDB:         NO  (auto-initialized — no manual step needed)
+
+HOW TO RUN:
+    pytest tests/test_base_agent.py -v
+
+ESTIMATED RUNTIME: fast <5s
+
+NOTES:
+    All LLM clients and API key managers are mocked. No real API calls made.
+================================================================================
+"""
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 

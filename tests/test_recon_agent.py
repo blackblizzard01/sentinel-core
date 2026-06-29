@@ -1,3 +1,38 @@
+"""
+================================================================================
+TEST FILE: test_recon_agent.py
+================================================================================
+PURPOSE:
+    Verifies that ReconAgent correctly maps targets, detects frameworks, and prioritizes components.
+
+WHAT IS BEING TESTED:
+    - test_probe_endpoint_returns_correct_structure: Verify probe_endpoint returns a dict with all required keys.
+    - test_enumerate_routes_returns_live_urls: Verify enumerate_routes returns only URLs with non-(-1) status.
+    - test_detect_framework_fastapi: Verify detect_framework returns 'fastapi' for uvicorn server header.
+    - test_detect_framework_llm_endpoint: Verify detect_framework returns 'llm_endpoint' when openai token present.
+    - test_detect_framework_unknown: Verify detect_framework returns 'unknown' when no signatures match.
+    - test_assign_priority_high_score: Verify assign_priority returns 10 for an ideal LLM endpoint.
+    - test_fingerprint_model_llm_response: Verify fingerprint_model classifies a short LLM text answer.
+    - test_fingerprint_model_embedding_warning: Verify embedding responses return embedding_model and log a warning.
+    - test_build_component_map_validates_schema: Verify build_component_map returns validated component profiles.
+    - test_run_updates_state_and_writes_chroma: Verify run() populates state components and attempts ChromaDB writes.
+
+DEPENDENCIES (what must be running/available):
+    - Dummy target:     NO  (uvicorn dummy_target.app:app --port 8001)
+    - Sentinel backend: NO  (uvicorn backend.main:app --port 8000)
+    - Real API keys:    NO  (Groq / Gemini / DeepSeek in .env)
+    - Ollama:           NO  (ollama serve + ollama pull mistral)
+    - ChromaDB:         NO  (auto-initialized — no manual step needed)
+
+HOW TO RUN:
+    pytest tests/test_recon_agent.py -v
+
+ESTIMATED RUNTIME: fast <5s
+
+NOTES:
+    HTTPX is mocked, so no live dummy target is needed. LLM clients and KnowledgeBase are mocked.
+================================================================================
+"""
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

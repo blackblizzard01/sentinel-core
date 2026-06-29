@@ -1,7 +1,29 @@
 """
-Unit tests for KnowledgeBase.log_attack and get_top_attacks.
-Uses an isolated client_id per test run to prevent data bleed.
-ChromaDB runs in-process — no external services required.
+================================================================================
+TEST FILE: test_attack_logging.py
+================================================================================
+PURPOSE:
+    Verifies that KnowledgeBase correctly logs attacks, enforces client isolation, and identifies successful attacks above threshold.
+
+WHAT IS BEING TESTED:
+    - test_log_attack_and_retrieve: Verifies that a logged attack is retrievable via get_top_attacks with matching domain, score, and payload content.
+    - test_successful_attack_threshold: Verifies that attacks scoring >= SUCCESS_THRESHOLD are logged to both attack_history and successful_attacks collections.
+
+DEPENDENCIES (what must be running/available):
+    - Dummy target:     NO  (uvicorn dummy_target.app:app --port 8001)
+    - Sentinel backend: NO  (uvicorn backend.main:app --port 8000)
+    - Real API keys:    NO  (Groq / Gemini / DeepSeek in .env)
+    - Ollama:           NO  (ollama serve + ollama pull mistral)
+    - ChromaDB:         YES (auto-initialized — no manual step needed)
+
+HOW TO RUN:
+    pytest tests/test_attack_logging.py -v
+
+ESTIMATED RUNTIME: fast <5s
+
+NOTES:
+    Uses an isolated client_id per test run to prevent data bleed. ChromaDB runs in-process.
+================================================================================
 """
 
 # stdlib
@@ -52,7 +74,6 @@ async def test_log_attack_and_retrieve(kb: KnowledgeBase) -> None:
     )
 
     results = await kb.get_top_attacks(
-        client_id=kb.client_id,
         domain=domain,
         component_type=component_type,
         k=5,
@@ -91,8 +112,8 @@ async def test_client_isolation(kb: KnowledgeBase) -> None:
     )
 
     other_client_id = f"other-client-{uuid.uuid4().hex[:8]}"
-    results = await kb.get_top_attacks(
-        client_id=other_client_id,
+    other_kb = KnowledgeBase(client_id=other_client_id, scan_id=kb.scan_id)
+    results = await other_kb.get_top_attacks(
         domain=domain,
         component_type=component_type,
         k=5,

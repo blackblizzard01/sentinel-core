@@ -1,7 +1,32 @@
-"""Unit tests for KnowledgeBase.get_top_attacks and log_successful_attack.
+"""
+================================================================================
+TEST FILE: test_kb_retrieval.py
+================================================================================
+PURPOSE:
+    Verifies that KnowledgeBase retrieves top attacks correctly with client isolation and filters.
 
-Uses chromadb.EphemeralClient() for full isolation — no disk writes.
-Patches get_chroma_client so the singleton is never touched.
+WHAT IS BEING TESTED:
+    - test_get_top_attacks_filters_by_domain_and_component_type: Only the correct records should be returned.
+    - test_get_top_attacks_results_ordered_by_score_descending: Results must be sorted by score descending.
+    - test_get_top_attacks_client_isolation: Records for one client must never appear in another's results.
+    - test_log_successful_attack_skips_below_threshold: Attacks below SUCCESS_THRESHOLD must not be written.
+    - test_get_top_attacks_returns_empty_on_no_match: Empty collection must return an empty list without raising.
+
+DEPENDENCIES (what must be running/available):
+    - Dummy target:     NO  (uvicorn dummy_target.app:app --port 8001)
+    - Sentinel backend: NO  (uvicorn backend.main:app --port 8000)
+    - Real API keys:    NO  (Groq / Gemini / DeepSeek in .env)
+    - Ollama:           NO  (ollama serve + ollama pull mistral)
+    - ChromaDB:         YES (auto-initialized — no manual step needed)
+
+HOW TO RUN:
+    pytest tests/test_kb_retrieval.py -v
+
+ESTIMATED RUNTIME: fast <5s
+
+NOTES:
+    Uses chromadb.EphemeralClient() for full isolation — no disk writes. Patches get_chroma_client so the singleton is never touched.
+================================================================================
 """
 import uuid
 

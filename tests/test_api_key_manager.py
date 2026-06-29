@@ -1,3 +1,32 @@
+"""
+================================================================================
+TEST FILE: test_api_key_manager.py
+================================================================================
+PURPOSE:
+    Verifies that the ApiKeyManager correctly loads, cycles, and rotates API keys from the environment variables.
+
+WHAT IS BEING TESTED:
+    - test_resolve_key_pool_uses_numbered_keys: Verify numbered env keys are loaded into the provider pool.
+    - test_acquire_key_round_robin: Verify acquire_key cycles through all configured keys.
+    - test_rotate_advances_to_next_key: Verify rotate returns the next key after the current cursor.
+    - test_acquire_key_raises_when_no_keys: Verify a clear error is raised when no keys are configured.
+
+DEPENDENCIES (what must be running/available):
+    - Dummy target:     NO  (uvicorn dummy_target.app:app --port 8001)
+    - Sentinel backend: NO  (uvicorn backend.main:app --port 8000)
+    - Real API keys:    NO  (Groq / Gemini / DeepSeek in .env)
+    - Ollama:           NO  (ollama serve + ollama pull mistral)
+    - ChromaDB:         NO  (auto-initialized — no manual step needed)
+
+HOW TO RUN:
+    pytest tests/test_api_key_manager.py -v
+
+ESTIMATED RUNTIME: fast <5s
+
+NOTES:
+    Uses monkeypatch to mock environment variables. No real keys are loaded.
+================================================================================
+"""
 import pytest
 
 from agents.api_key_manager import ApiKeyManager, resolve_key_pool
