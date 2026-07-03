@@ -17,7 +17,7 @@ from agents.cvss_tables import (
     ScopeType,
     cvss_roundup,
 )
-from constants import Severity, get_severity_from_score
+from constants import PARTIAL_THRESHOLD, REPORT_CVSS_MAP, Severity, get_severity_from_score
 from knowledge_base.knowledge_base import KnowledgeBase
 from agents.base_agent import BaseAgent
 from agents.exceptions import ReportGenerationTimeout
@@ -392,3 +392,115 @@ class ReportAgent(BaseAgent):
             f"scan_id={scan_id} entries={len(timeline)} of {len(findings)} total findings",
         )
         return timeline
+
+    def _cvss_to_priority(self, base_score: float) -> int:
+        """Map a CVSS base score to a priority rank using REPORT_CVSS_MAP bands.
+
+        Priority 1 = Critical (most urgent), 4 = Low.
+
+        Args:
+            base_score: CVSS base score, 0.0-10.0.
+
+        Returns:
+            Integer priority rank, 1 (highest) to 4 (lowest).
+        """
+        priority_order = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW]
+        for rank, severity in enumerate(priority_order, start=1):
+            low, high = REPORT_CVSS_MAP[severity]
+            if low <= base_score <= high:
+                return rank
+        return len(priority_order)  # fallback: lowest priority
+
+    async def generate_remediation_roadmap(
+        self, findings: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Generate a prioritized remediation roadmap from scan findings.
+
+        Only findings with score > PARTIAL_THRESHOLD are included. Each
+        finding gets one remediation item via a single batched Gemini call
+        requesting structured JSON output, then results are sorted by
+        priority ascending (1 = most urgent).
+
+        Args:
+            findings: Flat list of finding dicts. Each must include
+                component_id, component_type, domain, score, and either
+                payload_preview/response_preview for context.
+
+        Returns:
+            List of remediation item dicts, sorted by priority ascending:
+            {priority, component, domain, short_title, description,
+             code_example, estimated_effort}
+
+        Raises:
+            ReportGenerationTimeout: If Gemini does not respond within 60 seconds.
+        """
+        actionable = [f for f in findings if f["score"] > PARTIAL_THRESHOLD]
+
+        if not actionable:
+            self.log_action("generate_remediation_roadmap", "no findings above PARTIAL_THRESHOLD")
+            return []
+
+        findings_payload = [
+            {
+                "component_id": f["component_id"],
+                "component_type": f["component_type"],
+                "domain": f["domain"],
+                "score": f["score"],
+                "cvss_base_score": self.map_cvss_score(
+                    f["score"], f["domain"], f["component_type"]
+                )["base_score"],
+            }
+            for f in actionable
+        ]
+
+        system_prompt = (
+            "You are a security consultant producing a remediation roadmap. "
+            "Respond with ONLY a JSON array, no markdown fences, no prose "
+            "before or after. For each finding provided, output one object "
+            "with exactly these keys: component (string), domain (string), "
+            "short_title (string, under 10 words), description (string, "
+            "2-3 sentences explaining the fix), code_example (string, a "
+            "concrete code or config snippet where applicable — a hardened "
+            "system prompt for system_prompt_extraction or prompt_injection "
+            "findings, an input sanitization snippet for api_attacks "
+            "findings, or an empty string if not applicable to the domain), "
+            "estimated_effort (one of: Low, Medium, High)."
+        )
+
+        user_prompt = (
+            f"Findings requiring remediation:\n{json.dumps(findings_payload, default=str)}\n\n"
+            "Output the JSON array now."
+        )
+
+        self.log_action(
+            "generate_remediation_roadmap_start", f"findings={len(actionable)}"
+        )
+
+        try:
+            raw_response = await asyncio.wait_for(
+                self.call_gemini(prompt=user_prompt, system=system_prompt),
+                timeout=60.0,
+            )
+        except asyncio.TimeoutError as exc:
+            self.log_error("generate_remediation_roadmap timed out", exc)
+            raise ReportGenerationTimeout(self.agent_name, 60.0) from exc
+
+        try:
+            cleaned = raw_response.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("```")[1]
+                cleaned = cleaned.removeprefix("json").strip()
+            remediation_items = json.loads(cleaned)
+        except (json.JSONDecodeError, IndexError) as exc:
+            self.log_error("generate_remediation_roadmap: failed to parse Gemini JSON", exc)
+            raise
+
+        for item, finding_payload in zip(remediation_items, findings_payload):
+            item["priority"] = self._cvss_to_priority(finding_payload["cvss_base_score"])
+
+        remediation_items.sort(key=lambda item: item["priority"])
+
+        self.log_action(
+            "generate_remediation_roadmap_complete", f"items={len(remediation_items)}"
+        )
+        return remediation_items
