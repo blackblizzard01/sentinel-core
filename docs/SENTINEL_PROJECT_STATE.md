@@ -1,6 +1,6 @@
 ────────────────────────────────────────────────
 # SENTINEL AI — PROJECT STATE DOCUMENT
-*Last updated: 2026-06-29 | Covers: Weeks 1–4 completed*
+*Last updated: 2026-07-03 | Covers: Weeks 1–5 completed*
 ────────────────────────────────────────────────
 
 ## 1. WHAT THIS PROJECT IS
@@ -21,7 +21,10 @@ Sentinel AI is an autonomous AI infrastructure security testing platform designe
 | ReconAgent | `agents/recon_agent.py` | ✅ Complete | Discovers attack surface / components | None |
 | AttackAgent | `agents/attack_agent.py` | ✅ Complete | Generates and executes payloads | None |
 | MutationAgent | `agents/mutation_agent.py` | ✅ Complete | Mutates successful attacks using DeepSeek | None |
-| ReportAgent (skeleton) | N/A | ❌ Skeleton | Compiles vulnerability findings | Missing file and logic |
+| ReportAgent | `agents/report_agent.py` | ✅ Complete | Aggregates findings, maps CVSS scores, generates executive summary + per-component technical findings + remediation roadmap via Gemini, writes PDF (ReportLab) and JSON exports | WebSocket ScanCompleteEvent/report_path not yet covered by an automated test (manual-only); PDF section-content not asserted, only file existence |
+| CVSS scoring | `agents/cvss_tables.py` | ✅ Complete | CVSS 3.1 approximation tables and Roundup(x) logic used by ReportAgent.map_cvss_score | Simplified model — fixed AC:L/PR:N/UI:N, sentinel_score maps directly to Impact rather than decomposed C/I/A |
+| Report styling | `agents/report_styles.py` | ✅ Complete | PDF color/font constants (severity colors, section headers) | None |
+| Custom exceptions | `agents/exceptions.py` | ✅ Complete | Houses ReportGenerationTimeout | First exceptions module in the project — no other custom exceptions defined yet |
 | AutopatchAgent (skeleton) | N/A | ❌ Skeleton | Generates code remediations | Missing file and logic |
 | Orchestrator | `agents/orchestrator.py` | ✅ Complete | Runs LangGraph state machine | None |
 | KnowledgeBase | `knowledge_base/knowledge_base.py` | ✅ Complete | ChromaDB interface and semantic queries | None |
@@ -134,20 +137,50 @@ python agents/orchestrator.py
 | `tests/test_week2_integration.py` | Full graph integration (iteration=1) | Yes | Yes (Mocked) | `pytest tests/test_week2_integration.py` |
 | `tests/test_w3_team_06_stopping_conditions.py` | Routing logic (halt, max loops) | No | No | `pytest tests/test_w3_team_06_stopping_conditions.py` |
 | `tests/test_week3_benchmark.py` | 3-iteration score validation & WSEvents | Yes | No (Mocked) | `pytest tests/test_week3_benchmark.py` |
-| `tests/test_week4_integration.py` | Full 3-component pipeline, 5 domains, ComponentComplete events, cross-component hints | Yes | No (Mocked) | `pytest tests/test_week4_integration.py -v -s` |
+| `tests/test_week4_integration.py` | Full 3-component multi-domain pipeline integration test | Yes | No (Mocked) | `pytest tests/test_week4_integration.py -v -s` |
+| `tests/test_report_agent_cvss.py` | CVSS base score formula regression + vector string correctness | No | No | `pytest tests/test_report_agent_cvss.py` |
+| `tests/test_week5_report_integration.py` | Full report pipeline: aggregate_findings -> executive summary -> component findings -> timeline -> remediation -> PDF/JSON write, via report_node | Yes | No (Mocked) | `pytest tests/test_week5_report_integration.py -v -s` |
 
 ## 11. KNOWN GAPS AND DEFERRED ITEMS
 ### Real gaps (things that are missing or broken)
-- `ReportAgent` and `AutopatchAgent` have no implementation files (`.py` files are missing in `agents/`); the orchestrator nodes simply log a skeleton message.
+- `AutopatchAgent` has no implementation file — Week 6 task.
+- ReportAgent's WebSocket ScanCompleteEvent (with report_path populated)
+  fires correctly in run_scan() but has no automated test covering it —
+  verified manually only. A FastAPI TestClient + WebSocket test is
+  deferred to a future task.
+- generate_pdf()'s "at least four sections present" requirement is
+  verified manually (by opening the PDF), not asserted in
+  test_week5_report_integration.py — that test only checks file
+  existence and nonzero size.
+- Executive summary readability by a non-technical reader is a manual
+  human-review step, not automatable — must be re-checked whenever
+  generate_executive_summary's prompt changes.
 
 ### Intentionally deferred (per build plan)
 - ReportAgent: skeleton only — Week 5 task
 - AutopatchAgent: skeleton only — Week 6 task
 - Frontend: not started — Week 6 task
 
+### Fixed during Week 5 (not a Week 5 task, but discovered and resolved)
+- `ReconAgent` was writing component profiles directly via
+  `self.knowledge_base.chroma_client` instead of through
+  `KnowledgeBase.log_component_profile()`, violating the
+  never-call-ChromaDB-directly rule. It also only wrote client_id,
+  scan_id, and component_id to metadata — component_type, endpoint,
+  framework, and priority_score were serialized into the documents
+  field only, making them unqueryable. This silently broke
+  get_component_profiles(), get_cross_component_insights(), and any
+  other metadata-filtered query against component_profiles since
+  ReconAgent was first written. Fixed in agents/recon_agent.py to call
+  log_component_profile() properly. Any pre-existing chroma_store/
+  data from before this fix has malformed component_profiles records
+  and should be treated as unreliable for components discovered
+  before the fix landed.
+
 ## 12. UPDATE LOG
 | Date | What changed | Updated by |
 | --- | --- | --- |
 | 2026-06-29 | Initial document — Weeks 1–3 state | Cursor |
 | 2026-06-29 | Week 4 complete: 52 domain templates, multi-component pipeline, cross-component KB feed, W4 integration tests passing | Cursor |
+| 2026-07-03 | Week 5 complete: ReportAgent fully implemented (aggregate_findings, CVSS mapping, executive summary, per-component findings, attack timeline, remediation roadmap, PDF/JSON export), wired into report_node. Fixed a pre-existing ReconAgent bug bypassing KnowledgeBase for component profile writes. | Cursor |
 ────────────────────────────────────────────────

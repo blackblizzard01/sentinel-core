@@ -14,6 +14,8 @@
 | `test_week2_integration.py` | Verifies full integration graph run against the dummy target. | medium 10–30s | YES | NO |
 | `test_week3_benchmark.py` | Verifies 3-iteration score improvement, variant quality, and lineage. | medium 10–30s | YES | NO |
 | `test_week4_integration.py` | Full 3-component multi-domain pipeline integration test | medium 10-30s | YES | NO |
+| `test_report_agent_cvss.py` | Verifies map_cvss_score's Impact/Exploitability formula and vector string output against reference values (regression, not expert-validated — see test docstring). | fast <5s | NO | NO |
+| `test_week5_report_integration.py` | Verifies full report pipeline end-to-end via report_node: aggregation, executive summary, per-component findings, timeline, remediation roadmap, PDF + JSON write. | medium 10-30s | YES | NO (Gemini mocked) |
 
 ## Redundancy Findings
 
@@ -41,6 +43,9 @@
     :: Group 1 — Fast unit tests (no dependencies)
     python -m pytest tests\test_w3_team_06_stopping_conditions.py -v
 
+    :: Group 1b — CVSS scoring regression test (no dependencies)
+    python -m pytest tests\test_report_agent_cvss.py -v
+
     :: Group 2 — ChromaDB tests (no API keys needed)
     python -m pytest tests\test_kb_retrieval.py tests\test_knowledge_base_mutation.py tests\test_attack_logging.py -v
 
@@ -55,4 +60,7 @@
 
     :: Week 4 integration (dummy target required)
     python -m pytest tests\test_week4_integration.py -v -s
+
+    :: Week 5 report integration (dummy target required, Gemini mocked)
+    python -m pytest tests\test_week5_report_integration.py -v -s
 ```
