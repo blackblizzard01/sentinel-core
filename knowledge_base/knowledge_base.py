@@ -492,17 +492,21 @@ class KnowledgeBase:
 
         documents = results.get("documents") or []
         metadatas = results.get("metadatas") or []
-        mapped = [
-            {
-                "id": doc_id,
-                "component_id": meta["component_id"],
-                "component_type": meta["component_type"],
-                "endpoint": meta["endpoint"],
-                "framework": meta["framework"],
-                "priority_score": meta["priority_score"],
-            }
-            for doc_id, document, meta in zip(ids, documents, metadatas)
-        ]
+        mapped = []
+        for doc_id, document, meta in zip(ids, documents, metadatas):
+            if "component_type" not in meta:
+                logger.warning("Component profile %s is missing component_type in metadata", doc_id)
+            
+            mapped.append(
+                {
+                    "id": doc_id,
+                    "component_id": meta.get("component_id", "unknown"),
+                    "component_type": meta.get("component_type", "unknown"),
+                    "endpoint": meta.get("endpoint", "unknown"),
+                    "framework": meta.get("framework", "unknown"),
+                    "priority_score": meta.get("priority_score", 0.0),
+                }
+            )
         logger.info(
             "Component profiles fetched: %s entries for scan=%s",
             len(mapped),

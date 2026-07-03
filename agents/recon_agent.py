@@ -473,24 +473,17 @@ class ReconAgent(BaseAgent):
         manifest = state["manifest"]
         component_map = await self.build_component_map(manifest)
 
-        collection = self.knowledge_base.chroma_client.get_collection(
-            ChromaCollection.COMPONENT_PROFILES
-        )
         for component in component_map:
             try:
-                collection.add(
-                    documents=[json.dumps(component)],
-                    metadatas=[
-                        {
-                            "client_id": self.client_id,
-                            "scan_id": self.scan_id,
-                            "component_id": component["component_id"],
-                        }
-                    ],
-                    ids=[component["component_id"]],
+                await self.knowledge_base.log_component_profile(
+                    component_id=component["component_id"],
+                    component_type=component.get("type", "unknown"),
+                    endpoint=component.get("endpoint", "unknown"),
+                    framework=component.get("framework", "unknown"),
+                    priority_score=component.get("priority_score", 0.0),
                 )
             except Exception as exc:
-                self.log_error("ChromaDB write failed", exc)
+                self.log_error("Component profile write failed", exc)
 
         state["components"] = component_map
         state["phase"] = ScanPhase.RECON

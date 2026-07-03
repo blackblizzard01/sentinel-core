@@ -9,6 +9,7 @@ from langgraph.graph import END, StateGraph
 from agents.attack_agent import AttackAgent
 from agents.recon_agent import ReconAgent
 from agents.mutation_agent import MutationAgent
+from agents.report_agent import ReportAgent
 from knowledge_base.knowledge_base import KnowledgeBase
 from domains.domain_library import DomainLibrary
 from constants import CRITICAL_THRESHOLD, MAX_ITERATIONS, SUCCESS_THRESHOLD, TOP_K_RETRIEVAL, AgentName, ScanPhase, WSEvent
@@ -414,12 +415,26 @@ async def mutation_node(state: ScanState) -> dict:
 
 async def report_node(state: ScanState) -> dict:
     """Compile findings into a client-facing security report."""
+    scan_id = state["scan_id"]
+    client_id = state["client_id"]
+
+    await _broadcast(scan_id, WSEvent.AGENT_STARTED, {
+        "agent_name": AgentName.REPORT,
+        "phase": ScanPhase.REPORTING,
+    })
+
     logger.info(
-        "report_node | scan_id=%s | phase=%s", state["scan_id"], state["phase"]
+        "report_node | scan_id=%s | phase=%s", scan_id, state["phase"]
     )
-    logs = list(state["logs"])
-    logs.append("report_node: report generation (skeleton)")
-    return {"phase": ScanPhase.REPORTING, "logs": logs}
+
+    agent = ReportAgent(client_id=client_id, scan_id=scan_id)
+    updated_state = await agent.run(dict(state))
+
+    logger.info(
+        "report_node complete | scan_id=%s | report_path=%s",
+        scan_id, updated_state.get("report_path", ""),
+    )
+    return updated_state
 
 
 async def autopatch_node(state: ScanState) -> dict:

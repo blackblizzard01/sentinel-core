@@ -241,9 +241,71 @@ class ReportAgent(BaseAgent):
         }
 
     async def run(self, state: dict) -> dict:
-        """LangGraph node entry point. Full wiring deferred to a later task."""
-        self.log_action("run_called", "ReportAgent.run is not yet wired into the orchestrator")
-        return state
+        """LangGraph node entry point. Runs the full report pipeline:
+        aggregate findings, generate per-component markdown, executive
+        summary, timeline, remediation roadmap, then writes PDF + JSON
+        to disk. Populates report_path and report_json on the returned
+        state dict.
+
+        Args:
+            state: Current ScanState dict (must have client_id, scan_id).
+
+        Returns:
+            Updated state dict with report_path and report_json set.
+        """
+        client_id = state["client_id"]
+        scan_id = state["scan_id"]
+
+        # TODO: ScanState has no client_name field yet — using client_id
+        # as a display-name placeholder until a real client name source
+        # (e.g. a clients table, or a field added to the manifest) exists.
+        client_name = client_id
+
+        self.log_action("run_start", f"client_id={client_id} scan_id={scan_id}")
+
+        aggregated = await self.aggregate_findings(client_id, scan_id)
+
+        flat_findings: list[dict[str, Any]] = []
+        for component in aggregated["components"]:
+            markdown = await self.generate_component_findings(component)
+            component["markdown"] = markdown
+            for finding in component["findings"]:
+                flat_findings.append({
+                    **finding,
+                    "component_id": component["component_id"],
+                    "component_type": component["type"],
+                })
+
+        executive_summary = await self.generate_executive_summary(aggregated, client_name)
+        timeline = self.generate_attack_timeline(scan_id, flat_findings)
+        remediation_roadmap = await self.generate_remediation_roadmap(flat_findings)
+
+        report_data = {
+            "scan_id": scan_id,
+            "client_name": client_name,
+            "executive_summary": executive_summary,
+            "components": aggregated["components"],
+            "summary_stats": aggregated["summary_stats"],
+            "timeline": timeline,
+            "remediation_roadmap": remediation_roadmap,
+        }
+
+        json_data = self.generate_json_report(report_data)
+        paths = self.write_report_files(report_data)
+
+        self.log_action(
+            "run_complete",
+            f"pdf={paths['pdf_path']} json={paths['json_path']}",
+        )
+
+        updated_state = dict(state)
+        updated_state["report_path"] = paths["pdf_path"]
+        updated_state["report_json"] = json_data
+        updated_state["phase"] = "reporting"
+        logs = list(state.get("logs", []))
+        logs.append(f"report_node: report generated at {paths['pdf_path']}")
+        updated_state["logs"] = logs
+        return updated_state
 
     async def generate_executive_summary(
         self, aggregated_findings: dict[str, Any], client_name: str
@@ -605,7 +667,7 @@ class ReportAgent(BaseAgent):
             textColor=colors.HexColor(SECTION_HEADER_COLOR), spaceBefore=15, spaceAfter=10
         ))
         styles.add(ParagraphStyle(
-            name="BodyText", parent=styles["Normal"], fontSize=BODY_FONT_SIZE,
+            name="SentinelBodyText", parent=styles["Normal"], fontSize=BODY_FONT_SIZE,
             spaceBefore=6, spaceAfter=6
         ))
 
@@ -615,8 +677,8 @@ class ReportAgent(BaseAgent):
         flowables.append(Spacer(1, 100))
         flowables.append(Paragraph("<b>Sentinel AI</b> Security Report", styles["ReportTitle"]))
         flowables.append(Spacer(1, 50))
-        flowables.append(Paragraph(f"<b>Client Name:</b> {report_data['client_name']}", styles["BodyText"]))
-        flowables.append(Paragraph(f"<b>Scan Date:</b> {datetime.utcnow().strftime('%Y-%m-%d')}", styles["BodyText"]))
+        flowables.append(Paragraph(f"<b>Client Name:</b> {report_data['client_name']}", styles["SentinelBodyText"]))
+        flowables.append(Paragraph(f"<b>Scan Date:</b> {datetime.utcnow().strftime('%Y-%m-%d')}", styles["SentinelBodyText"]))
         
         stats = report_data["summary_stats"]
         overall_risk = Severity.LOW
@@ -626,24 +688,24 @@ class ReportAgent(BaseAgent):
             
         flowables.append(Paragraph(
             f"<b>Overall Risk Level:</b> <font color='{SEVERITY_COLORS[overall_risk]}'>{overall_risk.upper()}</font>", 
-            styles["BodyText"]
+            styles["SentinelBodyText"]
         ))
         flowables.append(PageBreak())
 
         # 2. Table of Contents Placeholder
         flowables.append(Paragraph("Table of Contents", styles["SectionHeader"]))
-        flowables.append(Paragraph("1. Executive Summary", styles["BodyText"]))
-        flowables.append(Paragraph("2. Risk Dashboard", styles["BodyText"]))
-        flowables.append(Paragraph("3. Component Findings", styles["BodyText"]))
-        flowables.append(Paragraph("4. Attack Timeline", styles["BodyText"]))
-        flowables.append(Paragraph("5. Remediation Roadmap", styles["BodyText"]))
+        flowables.append(Paragraph("1. Executive Summary", styles["SentinelBodyText"]))
+        flowables.append(Paragraph("2. Risk Dashboard", styles["SentinelBodyText"]))
+        flowables.append(Paragraph("3. Component Findings", styles["SentinelBodyText"]))
+        flowables.append(Paragraph("4. Attack Timeline", styles["SentinelBodyText"]))
+        flowables.append(Paragraph("5. Remediation Roadmap", styles["SentinelBodyText"]))
         flowables.append(PageBreak())
 
         # 3. Executive Summary
         flowables.append(Paragraph("Executive Summary", styles["SectionHeader"]))
         for paragraph in report_data["executive_summary"].split("\n\n"):
             if paragraph.strip():
-                flowables.append(Paragraph(paragraph.strip(), styles["BodyText"]))
+                flowables.append(Paragraph(paragraph.strip(), styles["SentinelBodyText"]))
         flowables.append(Spacer(1, 20))
 
         # 4. Risk Dashboard (summary_stats table)
@@ -684,7 +746,7 @@ class ReportAgent(BaseAgent):
             for block in markdown_text.split("\n\n"):
                 if block.strip():
                     formatted = block.replace("\n", "<br/>")
-                    flowables.append(Paragraph(formatted, styles["BodyText"]))
+                    flowables.append(Paragraph(formatted, styles["SentinelBodyText"]))
             flowables.append(Spacer(1, 15))
         flowables.append(PageBreak())
 
