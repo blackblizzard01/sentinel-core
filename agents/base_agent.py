@@ -34,6 +34,11 @@ try:
 except ImportError:  # pragma: no cover
     ResourceExhausted = Exception  # type: ignore[misc, assignment]
 
+try:
+    from google.genai.errors import ServerError
+except ImportError:
+    ServerError = Exception
+
 
 class BaseAgent(ABC):
     """Abstract base class for all Sentinel AI agents. Provides shared LLM clients,
@@ -144,7 +149,7 @@ class BaseAgent(ABC):
         """Call Google Gemini flash with retry on rate-limit. Returns response string."""
 
         @retry(
-            retry=retry_if_exception_type((ResourceExhausted,)),
+            retry=retry_if_exception_type((ResourceExhausted, ServerError)),
             wait=wait_exponential(multiplier=1, min=2, max=30),
             stop=stop_after_attempt(3),
             before_sleep=self._gemini_before_retry,

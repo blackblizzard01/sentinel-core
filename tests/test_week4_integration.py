@@ -106,10 +106,14 @@ async def scan_results() -> dict:
             }
         ]
 
+    async def mock_report_run(self, state: dict) -> dict:
+        return state
+
     with patch("agents.orchestrator.MAX_ITERATIONS", 1), \
          patch("agents.attack_agent.AttackAgent.execute_attack", mock_execute_attack), \
          patch("agents.orchestrator._broadcast", mock_broadcast), \
-         patch("agents.attack_agent.KnowledgeBase.get_cross_component_insights", mock_get_cross_component_insights):
+         patch("agents.attack_agent.KnowledgeBase.get_cross_component_insights", mock_get_cross_component_insights), \
+         patch("agents.report_agent.ReportAgent.run", mock_report_run):
         final_state = await run_scan(client_id, scan_id, manifest=manifest)
 
     elapsed = time.monotonic() - start_time

@@ -182,9 +182,9 @@ class LLMModel:
     QWEN_72B     = "qwen-2.5-72b-instruct"      # Mutation agent (replaces GPT-4o mini)
 
     # Google Gemini (free — aistudio.google.com)
-    GEMINI_FLASH = "gemini-1.5-flash"           # ReportAgent (fast, free)
-    GEMINI_PRO   = "gemini-1.5-pro"             # AutopatchAgent (higher quality)
-    GEMINI       = GEMINI_FLASH                 # Alias used by BaseAgent
+    GEMINI_FLASH = "gemini-3.5-flash"       # Updated from 1.5-flash
+    GEMINI_PRO   = "gemini-3.1-pro-preview" # Updated from 1.5-pro
+    GEMINI       = GEMINI_FLASH            # Alias used by BaseAgent
 
     # DeepSeek (free credits — platform.deepseek.com)
     DEEPSEEK_CHAT = "deepseek-chat"            # MutationAgent (OpenAI-compatible API)

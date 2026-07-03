@@ -255,10 +255,7 @@ async def test_run_updates_state_and_writes_chroma(recon_agent: ReconAgent) -> N
     }
     agent.build_component_map = AsyncMock(return_value=[mock_component])  # type: ignore[method-assign]
 
-    mock_collection = MagicMock()
-    agent.knowledge_base.chroma_client.get_collection.return_value = (
-        mock_collection
-    )
+    agent.knowledge_base.log_component_profile = AsyncMock(return_value="mock-profile-id")
 
     state = {
         "client_id": "test-client",
@@ -284,4 +281,10 @@ async def test_run_updates_state_and_writes_chroma(recon_agent: ReconAgent) -> N
     assert len(result["components"]) == 1
     assert result["phase"] == "recon"
     assert any("ReconAgent complete" in entry for entry in result["logs"])
-    mock_collection.add.assert_called_once()
+    agent.knowledge_base.log_component_profile.assert_called_once_with(
+        component_id=mock_component["component_id"],
+        component_type=mock_component["type"],
+        endpoint=mock_component["endpoint"],
+        framework=mock_component["framework"],
+        priority_score=mock_component["priority_score"],
+    )
