@@ -17,7 +17,7 @@ from agents.cvss_tables import (
     ScopeType,
     cvss_roundup,
 )
-from constants import get_severity_from_score
+from constants import Severity, get_severity_from_score
 from knowledge_base.knowledge_base import KnowledgeBase
 from agents.base_agent import BaseAgent
 from agents.exceptions import ReportGenerationTimeout
@@ -81,6 +81,7 @@ class ReportAgent(BaseAgent):
             component_map[profile["component_id"]] = {
                 "component_id": profile["component_id"],
                 "type": profile["component_type"],
+                "endpoint": profile["endpoint"],
                 "findings": [],
             }
 
@@ -95,6 +96,7 @@ class ReportAgent(BaseAgent):
                 component_map[component_id] = {
                     "component_id": component_id,
                     "type": attack["component_type"],
+                    "endpoint": "unknown",  # no profile record for this component
                     "findings": [],
                 }
 
@@ -109,6 +111,7 @@ class ReportAgent(BaseAgent):
                     "payload_preview": attack["payload_preview"],
                     "response_preview": attack["response_preview"],
                     "severity": severity,
+                    "timestamp": attack["timestamp"],
                 }
             )
 
@@ -279,3 +282,113 @@ class ReportAgent(BaseAgent):
 
         self.log_action("generate_executive_summary_complete", f"length={len(summary)}")
         return summary
+
+    async def generate_component_findings(self, component: dict[str, Any]) -> str:
+        """Generate a technical findings markdown section for one component.
+
+        Only findings with score > 0.0 are included. Each included finding
+        gets a CVSS score via map_cvss_score, a truncated payload excerpt,
+        and the response excerpt that evidences the vulnerability.
+
+        Args:
+            component: One entry from aggregate_findings()["components"].
+
+        Returns:
+            Markdown-formatted technical findings section for this component,
+            ready to embed directly into the PDF report.
+
+        Raises:
+            ReportGenerationTimeout: If Gemini does not respond within 60 seconds.
+        """
+        active_findings = [f for f in component["findings"] if f["score"] > 0.0]
+        domains_tested = sorted({f["domain"] for f in component["findings"]})
+
+        finding_blocks: list[str] = []
+        for finding in active_findings:
+            cvss = self.map_cvss_score(
+                finding["score"], finding["domain"], component["type"]
+            )
+            payload_excerpt = finding["payload_preview"][:100]
+            finding_blocks.append(
+                f"- Domain: {finding['domain']}\n"
+                f"  CVSS: {cvss['base_score']} ({cvss['severity']})\n"
+                f"  Sentinel score: {finding['score']:.2f}\n"
+                f"  Payload excerpt: {payload_excerpt}\n"
+                f"  Response excerpt: {finding['response_preview']}"
+            )
+
+        system_prompt = (
+            "You are a security consultant writing a technical findings section "
+            "for a penetration test report. Output structured markdown suitable "
+            "for direct embedding in a PDF. For the component provided, write: "
+            "the component endpoint and type as a heading, the list of domains "
+            "tested, then for each finding a subsection with the attack domain, "
+            "CVSS score, a single-sentence description of what was demonstrated, "
+            "the sanitized payload excerpt, and the response excerpt that "
+            "evidences the vulnerability. Do not invent findings not provided."
+        )
+
+        user_prompt = (
+            f"Component ID: {component['component_id']}\n"
+            f"Endpoint: {component['endpoint']}\n"
+            f"Type: {component['type']}\n"
+            f"Domains tested: {', '.join(domains_tested)}\n\n"
+            f"Findings:\n" + "\n".join(finding_blocks)
+        )
+
+        self.log_action(
+            "generate_component_findings_start",
+            f"component_id={component['component_id']} findings={len(active_findings)}",
+        )
+
+        try:
+            markdown = await asyncio.wait_for(
+                self.call_gemini(prompt=user_prompt, system=system_prompt),
+                timeout=60.0,
+            )
+        except asyncio.TimeoutError as exc:
+            self.log_error("generate_component_findings timed out", exc)
+            raise ReportGenerationTimeout(self.agent_name, 60.0) from exc
+
+        self.log_action(
+            "generate_component_findings_complete",
+            f"component_id={component['component_id']} length={len(markdown)}",
+        )
+        return markdown
+
+    def generate_attack_timeline(
+        self, scan_id: str, findings: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Build a chronological timeline of critical and high findings.
+
+        Args:
+            scan_id: Scan identifier, included in each timeline entry.
+            findings: Flat list of finding dicts (each must have "severity"
+                and "timestamp" keys, as produced by aggregate_findings()'s
+                per-component findings lists).
+
+        Returns:
+            List of timeline entry dicts, sorted by timestamp ascending,
+            containing only Severity.CRITICAL and Severity.HIGH findings.
+        """
+        relevant = [
+            f for f in findings if f["severity"] in (Severity.CRITICAL, Severity.HIGH)
+        ]
+        relevant.sort(key=lambda f: f["timestamp"])
+
+        timeline = [
+            {
+                "scan_id": scan_id,
+                "timestamp": f["timestamp"],
+                "domain": f["domain"],
+                "severity": f["severity"],
+                "score": f["score"],
+            }
+            for f in relevant
+        ]
+
+        self.log_action(
+            "generate_attack_timeline",
+            f"scan_id={scan_id} entries={len(timeline)} of {len(findings)} total findings",
+        )
+        return timeline
