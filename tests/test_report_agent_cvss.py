@@ -21,9 +21,15 @@ from agents.report_agent import ReportAgent
 from constants import AttackDomain, ComponentType
 
 
+from unittest.mock import patch
+
 @pytest.fixture
 def agent() -> ReportAgent:
-    return ReportAgent()
+    with patch("agents.base_agent.ApiKeyManager.acquire_key", return_value="dummy-key"), \
+         patch("agents.base_agent.AsyncGroq"), \
+         patch("agents.base_agent.AsyncOpenAI"), \
+         patch("agents.base_agent.genai.Client"):
+        return ReportAgent(client_id="test-client", scan_id="test-scan")
 
 
 @pytest.mark.parametrize(

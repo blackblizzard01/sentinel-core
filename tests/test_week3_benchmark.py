@@ -176,10 +176,14 @@ async def benchmark_results() -> dict:
             }
         ]
 
+    async def mock_report_run(self, state: dict) -> dict:
+        return state
+
     with patch("agents.attack_agent.AttackAgent.execute_attack", _mock_execute_attack), \
          patch("agents.orchestrator._broadcast", _mock_broadcast), \
          patch("agents.mutation_agent.MutationAgent.generate_variants", _mock_generate_variants), \
-         patch("knowledge_base.knowledge_base.KnowledgeBase.get_top_attacks", _mock_get_top_attacks):
+         patch("knowledge_base.knowledge_base.KnowledgeBase.get_top_attacks", _mock_get_top_attacks), \
+         patch("agents.report_agent.ReportAgent.run", mock_report_run):
         final_state = await run_scan(client_id, scan_id, manifest=manifest)
 
     scores_by_iteration = dict(_call_count["scores"])

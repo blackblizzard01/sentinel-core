@@ -104,8 +104,12 @@ async def scan_results() -> dict:
             "error": None,
         }
 
+    async def mock_report_run(self, state: dict) -> dict:
+        return state
+
     with patch("agents.orchestrator.MAX_ITERATIONS", 1), \
-         patch("agents.attack_agent.AttackAgent.execute_attack", mock_execute_attack):
+         patch("agents.attack_agent.AttackAgent.execute_attack", mock_execute_attack), \
+         patch("agents.report_agent.ReportAgent.run", mock_report_run):
         final_state = await run_scan(client_id, scan_id, manifest=manifest)
     
     return {
@@ -183,11 +187,12 @@ async def test_attack_agent_executes_all_prompt_injection_templates(scan_results
         where={"client_id": client_id}
     )
     
-    # Filter by domain to only count prompt_injection attacks
+    # Filter by domain to only count prompt_injection attacks on the /chat component
     metadatas = results.get("metadatas", [])
+    chat_component_id = f"{scan_id}_0"
     prompt_inj_attacks = [
         m for m in metadatas 
-        if m.get("domain") == "prompt_injection"
+        if m.get("domain") == "prompt_injection" and m.get("component_id") == chat_component_id
     ]
     attack_count = len(prompt_inj_attacks)
     
@@ -232,8 +237,8 @@ async def test_all_attacks_logged_with_scores(scan_results: dict) -> None:
         if score is not None and isinstance(score, (int, float)):
             attacks_with_scores += 1
     
-    assert attacks_with_scores >= 19, (
-        f"Expected all attacks to have scores, but only {attacks_with_scores} have valid scores."
+    assert attacks_with_scores == len(prompt_inj_attacks), (
+        f"Expected all {len(prompt_inj_attacks)} attacks to have scores, but only {attacks_with_scores} have valid scores."
     )
     
     logger.info(f"✅ All {attacks_with_scores} attacks logged with scores")

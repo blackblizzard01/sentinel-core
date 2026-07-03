@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-03T12:15:59.202908Z",
+  "scan_id": "test-scan",
+  "client_name": "test-client",
+  "executive_summary": "Based on our comprehensive security assessment for test-client, the organization currently exhibits a Low overall risk posture. Our automated testing and analysis detected no vulnerabilities, misconfigurations, or active security gaps across your digital environment. This excellent result indicates that your existing security measures are highly effective and your business systems are currently well-protected against common cyber threats.\n\nBecause the security assessment returned clean results, there are no critical findings or compromised components to report. All evaluated systems and software programs showed a strong defensive configuration with no active exposure points or weaknesses. This exceptional outcome demonstrates that your current technology infrastructure is operating securely, leaving no immediate gaps for unauthorized parties to exploit.\n\nEven with a perfect assessment result, maintaining this strong security posture requires ongoing attention. We recommend scheduling the next recurring vulnerability scan within the next ninety days to capture any new weaknesses that might arise from routine software updates or system changes. Additionally, your team should perform a monthly review of user account permissions to ensure that only active employees have access to sensitive business information, which will help prevent any future security drift.",
+  "components": [],
+  "summary_stats": {
+    "total_findings": 0,
+    "critical_count": 0,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0,
+    "scan_duration": 0.0
+  },
+  "timeline": [],
+  "remediation_roadmap": []
+}
