@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 from datetime import datetime
 from typing import Any
@@ -17,11 +19,17 @@ from agents.cvss_tables import (
 )
 from constants import get_severity_from_score
 from knowledge_base.knowledge_base import KnowledgeBase
+from agents.base_agent import BaseAgent
+from agents.exceptions import ReportGenerationTimeout
 
 logger = logging.getLogger(__name__)
 
-class ReportAgent:
+class ReportAgent(BaseAgent):
     """Compiles multi-collection scan data into a structured findings report."""
+
+    def __init__(self, client_id: str, scan_id: str) -> None:
+        """Initialise ReportAgent with LLM clients via BaseAgent."""
+        super().__init__(agent_name="report_agent", client_id=client_id, scan_id=scan_id)
 
     async def aggregate_findings(self, client_id: str, scan_id: str) -> dict[str, Any]:
         """Aggregate all findings for a scan into a structured dict.
@@ -213,3 +221,61 @@ class ReportAgent:
             "vector_string": vector_string,
             "severity": severity,
         }
+
+    async def run(self, state: dict) -> dict:
+        """LangGraph node entry point. Full wiring deferred to a later task."""
+        self.log_action("run_called", "ReportAgent.run is not yet wired into the orchestrator")
+        return state
+
+    async def generate_executive_summary(
+        self, aggregated_findings: dict[str, Any], client_name: str
+    ) -> str:
+        """Generate a 3-paragraph executive summary via Gemini for a non-technical audience.
+
+        Paragraph 1 covers overall risk posture, paragraph 2 the top three
+        most critical findings, paragraph 3 recommended immediate actions.
+
+        Args:
+            aggregated_findings: Output of aggregate_findings().
+            client_name: Display name of the client, for personalizing the summary.
+
+        Returns:
+            The generated summary text.
+
+        Raises:
+            ReportGenerationTimeout: If Gemini does not respond within 60 seconds.
+        """
+        system_prompt = (
+            "You are a security consultant writing an executive summary for a "
+            "non-technical business audience. Write exactly 3 paragraphs. "
+            "Paragraph 1: overall risk posture, stated as one of Critical, High, "
+            "Medium, or Low, in plain language. Paragraph 2: the top three most "
+            "critical findings, naming the specific affected components. "
+            "Paragraph 3: recommended immediate actions, with at least one "
+            "concrete, actionable remediation step. Avoid technical jargon. "
+            "Do not use markdown formatting."
+        )
+
+        user_prompt = (
+            f"Client: {client_name}\n\n"
+            f"Aggregated scan findings (JSON):\n"
+            f"{json.dumps(aggregated_findings, default=str)}\n\n"
+            "Write the 3-paragraph executive summary now."
+        )
+
+        self.log_action(
+            "generate_executive_summary_start",
+            f"client_name={client_name} components={len(aggregated_findings.get('components', []))}",
+        )
+
+        try:
+            summary = await asyncio.wait_for(
+                self.call_gemini(prompt=user_prompt, system=system_prompt),
+                timeout=60.0,
+            )
+        except asyncio.TimeoutError as exc:
+            self.log_error("generate_executive_summary timed out", exc)
+            raise ReportGenerationTimeout(self.agent_name, 60.0) from exc
+
+        self.log_action("generate_executive_summary_complete", f"length={len(summary)}")
+        return summary
