@@ -1,8 +1,23 @@
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Any
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+from agents.report_styles import (
+    BODY_FONT_SIZE,
+    BRAND_ACCENT_COLOR,
+    HEADER_FONT_SIZE,
+    SECTION_HEADER_COLOR,
+    SEVERITY_COLORS,
+    TITLE_FONT_SIZE,
+)
 
 from agents.cvss_tables import (
     ATTACK_COMPLEXITY_LOW_WEIGHT,
@@ -504,3 +519,259 @@ class ReportAgent(BaseAgent):
             "generate_remediation_roadmap_complete", f"items={len(remediation_items)}"
         )
         return remediation_items
+
+    def generate_json_report(self, report_data: dict[str, Any]) -> dict[str, Any]:
+        """Produce the structured JSON export consumed by AutopatchAgent.
+
+        This is a pass-through/normalization step, not a re-fetch — it
+        packages the same report_data dict already assembled from
+        aggregate_findings, map_cvss_score, generate_executive_summary,
+        generate_component_findings, generate_attack_timeline, and
+        generate_remediation_roadmap into one JSON-serializable dict with
+        a top-level "generated_at" timestamp and "schema_version" field,
+        so AutopatchAgent has a stable contract independent of internal
+        report_data shape changes.
+
+        Args:
+            report_data: Combined output dict from the report-generation
+                pipeline (executive_summary, components, summary_stats,
+                timeline, remediation_roadmap, client_name, scan_id).
+
+        Returns:
+            JSON-serializable dict, also written to
+            reports/sentinel_report_{scan_id}.json by generate_pdf's
+            caller — this method itself only builds and returns the dict,
+            it does not write to disk (see write_report_files below for
+            the disk-writing entry point).
+        """
+        return {
+            "schema_version": "1.0",
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            **report_data,
+        }
+
+    def generate_pdf(self, report_data: dict[str, Any], output_path: str = "reports") -> str:
+        """Assemble and write the full PDF report using ReportLab.
+
+        Sections, in order: cover page (client name, scan date, overall
+        risk level, Sentinel AI branding), table of contents, executive
+        summary, risk dashboard (summary_stats as a table), one section
+        per component's findings (using the markdown/text already
+        produced by generate_component_findings — render as formatted
+        paragraphs, not raw markdown), attack timeline (as a table sorted
+        chronologically), remediation roadmap (as a table sorted by
+        priority, using SEVERITY_COLORS-equivalent priority coloring).
+
+        Apply report_styles.SECTION_HEADER_COLOR to all section title
+        bars. Apply report_styles.SEVERITY_COLORS to color-code severity
+        labels wherever they appear (dashboard, findings, timeline).
+
+        The filename is always sentinel_report_{scan_id}.pdf regardless
+        of what report_data contains beyond scan_id — this is a fixed
+        convention, not caller-configurable. output_path is the target
+        directory; create it with os.makedirs(output_path, exist_ok=True)
+        if it doesn't exist.
+
+        Args:
+            report_data: Combined report pipeline output (must include
+                scan_id, client_name, executive_summary, components,
+                summary_stats, timeline, remediation_roadmap).
+            output_path: Target directory for the PDF. Defaults to "reports".
+
+        Returns:
+            The full path to the written PDF file.
+        """
+        required_keys = [
+            "scan_id", "client_name", "executive_summary", "components",
+            "summary_stats", "timeline", "remediation_roadmap"
+        ]
+        for key in required_keys:
+            if key not in report_data:
+                raise KeyError(f"Missing required report_data key: {key}")
+
+        os.makedirs(output_path, exist_ok=True)
+        pdf_filename = f"sentinel_report_{report_data['scan_id']}.pdf"
+        full_pdf_path = os.path.join(output_path, pdf_filename)
+
+        doc = SimpleDocTemplate(full_pdf_path, pagesize=letter)
+        styles = getSampleStyleSheet()
+        
+        styles.add(ParagraphStyle(
+            name="ReportTitle", parent=styles["Heading1"], fontSize=TITLE_FONT_SIZE,
+            textColor=colors.HexColor(BRAND_ACCENT_COLOR), spaceAfter=20, alignment=1
+        ))
+        styles.add(ParagraphStyle(
+            name="SectionHeader", parent=styles["Heading2"], fontSize=HEADER_FONT_SIZE,
+            textColor=colors.HexColor(SECTION_HEADER_COLOR), spaceBefore=15, spaceAfter=10
+        ))
+        styles.add(ParagraphStyle(
+            name="BodyText", parent=styles["Normal"], fontSize=BODY_FONT_SIZE,
+            spaceBefore=6, spaceAfter=6
+        ))
+
+        flowables = []
+
+        # 1. Cover Page
+        flowables.append(Spacer(1, 100))
+        flowables.append(Paragraph("<b>Sentinel AI</b> Security Report", styles["ReportTitle"]))
+        flowables.append(Spacer(1, 50))
+        flowables.append(Paragraph(f"<b>Client Name:</b> {report_data['client_name']}", styles["BodyText"]))
+        flowables.append(Paragraph(f"<b>Scan Date:</b> {datetime.utcnow().strftime('%Y-%m-%d')}", styles["BodyText"]))
+        
+        stats = report_data["summary_stats"]
+        overall_risk = Severity.LOW
+        if stats.get("critical_count", 0) > 0: overall_risk = Severity.CRITICAL
+        elif stats.get("high_count", 0) > 0: overall_risk = Severity.HIGH
+        elif stats.get("medium_count", 0) > 0: overall_risk = Severity.MEDIUM
+            
+        flowables.append(Paragraph(
+            f"<b>Overall Risk Level:</b> <font color='{SEVERITY_COLORS[overall_risk]}'>{overall_risk.upper()}</font>", 
+            styles["BodyText"]
+        ))
+        flowables.append(PageBreak())
+
+        # 2. Table of Contents Placeholder
+        flowables.append(Paragraph("Table of Contents", styles["SectionHeader"]))
+        flowables.append(Paragraph("1. Executive Summary", styles["BodyText"]))
+        flowables.append(Paragraph("2. Risk Dashboard", styles["BodyText"]))
+        flowables.append(Paragraph("3. Component Findings", styles["BodyText"]))
+        flowables.append(Paragraph("4. Attack Timeline", styles["BodyText"]))
+        flowables.append(Paragraph("5. Remediation Roadmap", styles["BodyText"]))
+        flowables.append(PageBreak())
+
+        # 3. Executive Summary
+        flowables.append(Paragraph("Executive Summary", styles["SectionHeader"]))
+        for paragraph in report_data["executive_summary"].split("\n\n"):
+            if paragraph.strip():
+                flowables.append(Paragraph(paragraph.strip(), styles["BodyText"]))
+        flowables.append(Spacer(1, 20))
+
+        # 4. Risk Dashboard (summary_stats table)
+        flowables.append(Paragraph("Risk Dashboard", styles["SectionHeader"]))
+        dashboard_data = [
+            ["Metric", "Value"],
+            ["Total Findings", str(stats.get("total_findings", 0))],
+            ["Critical", str(stats.get("critical_count", 0))],
+            ["High", str(stats.get("high_count", 0))],
+            ["Medium", str(stats.get("medium_count", 0))],
+            ["Low", str(stats.get("low_count", 0))],
+            ["Scan Duration", f"{stats.get('scan_duration', 0.0):.1f}s"]
+        ]
+        t = Table(dashboard_data, colWidths=[200, 100])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(SECTION_HEADER_COLOR)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), BODY_FONT_SIZE),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+            ('TEXTCOLOR', (1, 2), (1, 2), colors.HexColor(SEVERITY_COLORS[Severity.CRITICAL])),
+            ('TEXTCOLOR', (1, 3), (1, 3), colors.HexColor(SEVERITY_COLORS[Severity.HIGH])),
+            ('TEXTCOLOR', (1, 4), (1, 4), colors.HexColor(SEVERITY_COLORS[Severity.MEDIUM])),
+            ('TEXTCOLOR', (1, 5), (1, 5), colors.HexColor(SEVERITY_COLORS[Severity.LOW])),
+        ]))
+        flowables.append(t)
+        flowables.append(PageBreak())
+
+        # 5. Component Findings
+        flowables.append(Paragraph("Component Findings", styles["SectionHeader"]))
+        for comp_data in report_data.get("components", []):
+            markdown_text = comp_data.get("markdown", "")
+            if not markdown_text and comp_data.get("findings"):
+                markdown_text = f"Component ID: {comp_data.get('component_id')}\nEndpoint: {comp_data.get('endpoint')}\nType: {comp_data.get('type')}\nFindings count: {len(comp_data.get('findings', []))}"
+            
+            for block in markdown_text.split("\n\n"):
+                if block.strip():
+                    formatted = block.replace("\n", "<br/>")
+                    flowables.append(Paragraph(formatted, styles["BodyText"]))
+            flowables.append(Spacer(1, 15))
+        flowables.append(PageBreak())
+
+        # 6. Attack Timeline
+        flowables.append(Paragraph("Attack Timeline", styles["SectionHeader"]))
+        timeline = report_data["timeline"]
+        if timeline:
+            timeline_data = [["Timestamp", "Domain", "Severity", "Score"]]
+            for entry in timeline:
+                timeline_data.append([
+                    entry.get("timestamp", ""),
+                    entry.get("domain", ""),
+                    entry.get("severity", ""),
+                    f"{entry.get('score', 0.0):.2f}"
+                ])
+            tt = Table(timeline_data, colWidths=[120, 150, 80, 50])
+            ts = TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(SECTION_HEADER_COLOR)),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), BODY_FONT_SIZE),
+                ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+            ])
+            for i, row in enumerate(timeline, start=1):
+                sev = row.get("severity", Severity.NONE)
+                sev_color = colors.HexColor(SEVERITY_COLORS.get(sev, SEVERITY_COLORS[Severity.NONE]))
+                ts.add('TEXTCOLOR', (2, i), (2, i), sev_color)
+            tt.setStyle(ts)
+            flowables.append(tt)
+        else:
+            flowables.append(Paragraph("No critical or high attacks recorded.", styles["BodyText"]))
+        
+        flowables.append(PageBreak())
+
+        # 7. Remediation Roadmap
+        flowables.append(Paragraph("Remediation Roadmap", styles["SectionHeader"]))
+        roadmap = report_data["remediation_roadmap"]
+        if roadmap:
+            roadmap_data = [["Priority", "Component", "Domain", "Title", "Effort"]]
+            for item in roadmap:
+                roadmap_data.append([
+                    str(item.get("priority", "")),
+                    item.get("component", ""),
+                    item.get("domain", ""),
+                    item.get("short_title", ""),
+                    item.get("estimated_effort", "")
+                ])
+            rt = Table(roadmap_data, colWidths=[50, 100, 100, 150, 50])
+            rts = TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(SECTION_HEADER_COLOR)),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), BODY_FONT_SIZE),
+                ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+            ])
+            rt.setStyle(rts)
+            flowables.append(rt)
+        else:
+            flowables.append(Paragraph("No remediation actions required.", styles["BodyText"]))
+
+        doc.build(flowables)
+        return full_pdf_path
+
+    def write_report_files(self, report_data: dict[str, Any], output_path: str = "reports") -> dict[str, str]:
+        """Write both the PDF and JSON exports for a scan to disk.
+
+        Calls generate_pdf() and generate_json_report(), writes the JSON
+        result to reports/sentinel_report_{scan_id}.json using the same
+        output_path/naming convention as the PDF, and returns both paths.
+
+        Args:
+            report_data: Combined report pipeline output.
+            output_path: Target directory for both files. Defaults to "reports".
+
+        Returns:
+            {"pdf_path": str, "json_path": str}
+        """
+        pdf_path = self.generate_pdf(report_data, output_path)
+        
+        json_data = self.generate_json_report(report_data)
+        os.makedirs(output_path, exist_ok=True)
+        json_filename = f"sentinel_report_{report_data['scan_id']}.json"
+        full_json_path = os.path.join(output_path, json_filename)
+        
+        with open(full_json_path, "w", encoding="utf-8") as f:
+            json.dump(json_data, f, indent=2)
+            
+        return {"pdf_path": pdf_path, "json_path": full_json_path}
