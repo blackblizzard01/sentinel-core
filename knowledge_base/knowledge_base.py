@@ -466,6 +466,143 @@ class KnowledgeBase:
         )
         return mapped
 
+    async def get_component_profiles(self) -> list[dict[str, Any]]:
+        """Returns all component_profiles for this client and scan.
+
+        Uses .get() with client_id + scan_id filter — no semantic search.
+        """
+        collection = self._chroma.get_collection(ChromaCollection.COMPONENT_PROFILES)
+        try:
+            results = collection.get(
+                where={
+                    "$and": [
+                        {"client_id": {"$eq": self.client_id}},
+                        {"scan_id": {"$eq": self.scan_id}},
+                    ]
+                },
+                include=["metadatas", "documents"],
+            )
+        except chromadb.errors.ChromaError as exc:
+            logger.error("Failed to fetch component profiles: %s", exc)
+            raise
+
+        ids = results.get("ids") or []
+        if not ids:
+            return []
+
+        documents = results.get("documents") or []
+        metadatas = results.get("metadatas") or []
+        mapped = [
+            {
+                "id": doc_id,
+                "component_id": meta["component_id"],
+                "component_type": meta["component_type"],
+                "endpoint": meta["endpoint"],
+                "framework": meta["framework"],
+                "priority_score": meta["priority_score"],
+            }
+            for doc_id, document, meta in zip(ids, documents, metadatas)
+        ]
+        logger.info(
+            "Component profiles fetched: %s entries for scan=%s",
+            len(mapped),
+            self.scan_id,
+        )
+        return mapped
+
+    async def get_attack_history(self) -> list[dict[str, Any]]:
+        """Returns all attack_history records for this client and scan.
+
+        Uses .get() with client_id + scan_id filter — no semantic search.
+        """
+        collection = self._chroma.get_collection(ChromaCollection.ATTACK_HISTORY)
+        try:
+            results = collection.get(
+                where={
+                    "$and": [
+                        {"client_id": {"$eq": self.client_id}},
+                        {"scan_id": {"$eq": self.scan_id}},
+                    ]
+                },
+                include=["metadatas", "documents"],
+            )
+        except chromadb.errors.ChromaError as exc:
+            logger.error("Failed to fetch attack history: %s", exc)
+            raise
+
+        ids = results.get("ids") or []
+        if not ids:
+            return []
+
+        documents = results.get("documents") or []
+        metadatas = results.get("metadatas") or []
+        mapped = [
+            {
+                "id": doc_id,
+                "payload_preview": document,
+                "response_preview": meta.get("response_preview", ""),
+                "component_id": meta["component_id"],
+                "component_type": meta["component_type"],
+                "domain": meta["domain"],
+                "score": meta["score"],
+                "timestamp": meta["timestamp"],
+            }
+            for doc_id, document, meta in zip(ids, documents, metadatas)
+        ]
+        logger.info(
+            "Attack history fetched: %s entries for scan=%s",
+            len(mapped),
+            self.scan_id,
+        )
+        return mapped
+
+    async def get_scan_vulnerabilities(self) -> list[dict[str, Any]]:
+        """Returns vulnerability_catalog entries scoped to this client AND scan.
+
+        Distinct from get_vulnerability_catalog(), which is client-wide
+        across all scans. Uses .get() with client_id + scan_id filter.
+        """
+        collection = self._chroma.get_collection(ChromaCollection.VULNERABILITY_CATALOG)
+        try:
+            results = collection.get(
+                where={
+                    "$and": [
+                        {"client_id": {"$eq": self.client_id}},
+                        {"scan_id": {"$eq": self.scan_id}},
+                    ]
+                },
+                include=["metadatas", "documents"],
+            )
+        except chromadb.errors.ChromaError as exc:
+            logger.error("Failed to fetch scan vulnerabilities: %s", exc)
+            raise
+
+        ids = results.get("ids") or []
+        if not ids:
+            return []
+
+        documents = results.get("documents") or []
+        metadatas = results.get("metadatas") or []
+        mapped = [
+            {
+                "id": doc_id,
+                "description": document,
+                "severity": meta["severity"],
+                "domain": meta["domain"],
+                "component_id": meta["component_id"],
+                "score": meta["score"],
+                "remediation": meta["remediation"],
+                "timestamp": meta["timestamp"],
+            }
+            for doc_id, document, meta in zip(ids, documents, metadatas)
+        ]
+        logger.info(
+            "Scan vulnerabilities fetched: %s entries for scan=%s",
+            len(mapped),
+            self.scan_id,
+        )
+        return mapped
+
     async def get_cross_component_insights(
         self,
         completed_component_id: str,
