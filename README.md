@@ -1,4 +1,4 @@
-# 🛡️ Sentinel AI — Autonomous AI Infrastructure Security Testing Platform
+# 🛡️ Unaware AI — Autonomous AI Infrastructure Security Testing Platform
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
